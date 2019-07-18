@@ -7,6 +7,8 @@ ACTION pinkbankroll::init() {
 }
 
 
+
+
 ACTION pinkbankroll::announceroll(name creator, uint64_t creator_id, uint32_t upper_range_limit, name rake_recipient) {
   require_auth(creator);
   
@@ -36,6 +38,8 @@ ACTION pinkbankroll::announceroll(name creator, uint64_t creator_id, uint32_t up
 }
 
 
+
+
 ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier) {
   require_auth(creator);
   
@@ -46,6 +50,8 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
   check(itr_creator_and_id != rolls_by_creator_and_id.end(),
   "No bet with the specified creator_id has been announced");
   
+  check(amount.is_valid(),
+  "amount is invalid");
   check(amount.symbol == symbol("WAX", 8),
   "amount must be in WAX");
   
@@ -63,7 +69,7 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
   "the bet cant have an EV greater than 0.99 * amount");
   
   rolls_by_creator_and_id.modify(itr_creator_and_id, creator, [&](auto& r) {
-    r.total_amount.amount += amount.amount;
+    r.total_amount += amount;
   });
   
   uint64_t roll_id = itr_creator_and_id->roll_id;
@@ -88,10 +94,86 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
 }
 
 
-ACTION pinkbankroll::withdraw(name from, asset amount) {
-  require_auth(from);
+
+
+ACTION pinkbankroll::payoutbet(name from, asset amount) {
+  check(has_auth(from) || has_auth(_self),
+  "transaction doesn't have the required permission");
+  
+  check(amount.is_valid(),
+  "amount is invalid");
+  check(amount.symbol == symbol("WAX", 8),
+  "amount must be in WAX");
+  
+  auto payout_itr = payoutsTable.find(from.value);
+  check(payout_itr != payoutsTable.end(),
+  "the account has no outstanding payouts");
+  
+  check(payout_itr->outstanding_payout <= amount,
+  "the account doesn't have that many outstanding payouts");
+  
+  if (payout_itr->outstanding_payout == amount) {
+    payoutsTable.erase(payout_itr);
+  } else {
+    payoutsTable.modify(payout_itr, _self, [&](auto& p) {
+      p.outstanding_payout -= amount;
+    });
+  }
+  
+  action(
+    permission_level{_self, "active"_n},
+    "eosio.token"_n,
+    "transfer"_n,
+    std::make_tuple(_self, from, amount, std::string("bet payout"))
+  ).send();
   
 }
+
+
+
+
+ACTION pinkbankroll::withdraw(name from, uint64_t weight_to_withdraw) {
+  require_auth(from);
+  
+  auto investor_itr = investorsTable.find(from.value);
+  check(investor_itr != investorsTable.end(),
+  "the account doesn't have anything invested");
+  
+  check(weight_to_withdraw <= investor_itr->bankroll_weight,
+  "the account doesn't have that much bankroll_weight");
+  
+  statsStruct stats = statsTable.get();
+  uint64_t amount_to_withdraw = (uint64_t)((double)stats.bankroll.amount * (double)weight_to_withdraw) / (double)stats.total_bankroll_weight;
+  asset wax_to_withdraw = asset(amount_to_withdraw, symbol("WAX", 8));
+  
+  if (investor_itr->bankroll_weight == weight_to_withdraw) {
+    investorsTable.erase(investor_itr);
+  } else {
+    investorsTable.modify(investor_itr, _self, [&](auto& i) {
+      i.bankroll_weight -= weight_to_withdraw;
+    });
+  }
+  
+  stats.total_bankroll_weight -= weight_to_withdraw;
+  stats.bankroll -= wax_to_withdraw;
+  statsTable.set(stats, _self);
+  
+  action(
+    permission_level{_self, "active"_n},
+    "eosio.token"_n,
+    "transfer"_n,
+    std::make_tuple(_self, from, wax_to_withdraw, std::string("bankroll withdraw"))
+  ).send();
+  
+  action(
+    permission_level{_self, "active"_n},
+    _self,
+    "logwithdraw"_n,
+    std::make_tuple(from, weight_to_withdraw, wax_to_withdraw)
+  ).send();
+}
+
+
 
 
 ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
@@ -101,10 +183,42 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
 
 
 void pinkbankroll::receivetransfer(name from, name to, asset quantity, std::string memo) {
-  require_auth("eosio.token"_n);
-  statsStruct stats = statsTable.get_or_create(_self, statsStruct{});
-  stats.bankroll = quantity;
-  statsTable.set(stats, _self);
+  if (to != _self) {
+    return;
+  }
+  
+  if (memo.compare("deposit") == 0) {
+    statsStruct stats = statsTable.get();
+    
+    uint64_t added_bankroll_weight;
+    if (stats.bankroll.amount == 0) {
+      added_bankroll_weight = 1000000;
+    } else {
+      added_bankroll_weight = (int) ((double)quantity.amount / (double)stats.bankroll.amount * (double)stats.total_bankroll_weight);
+    }
+    
+    stats.bankroll += quantity;
+    stats.total_bankroll_weight += added_bankroll_weight;
+    statsTable.set(stats, _self);
+    
+    
+    auto investor_itr = investorsTable.find(from.value);
+    if (investor_itr != investorsTable.end()) {
+      investorsTable.modify(investor_itr, _self, [&](auto& i) {
+        i.bankroll_weight += added_bankroll_weight;
+      });
+    } else {
+      investorsTable.emplace(_self, [&](auto& i){
+        i.investor = from;
+        i.bankroll_weight = added_bankroll_weight;
+      });
+    }
+  
+  } else if (memo.rfind("startroll ") == 0) {
+    print("startroll");
+  } else {
+    check(false, "invalid memo");
+  }
 }
 
 
@@ -115,5 +229,9 @@ ACTION pinkbankroll::logannounce(uint64_t roll_id, name creator, uint64_t creato
 }
 
 ACTION pinkbankroll::logbet(uint64_t roll_id, uint64_t bet_id, name creator, uint64_t creator_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier) {
+  require_auth(_self);
+}
+
+ACTION pinkbankroll::logwithdraw(name investor, uint64_t weight_to_withdraw, asset amount) {
   require_auth(_self);
 }

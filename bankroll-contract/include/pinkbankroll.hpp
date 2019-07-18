@@ -11,19 +11,22 @@ CONTRACT pinkbankroll : public contract {
     pinkbankroll(name receiver, name code, datastream<const char*> ds):contract(receiver, code, ds),
     rollsTable(receiver, receiver.value),
     investorsTable(receiver, receiver.value),
+    payoutsTable(receiver, receiver.value),
     statsTable(receiver, receiver.value)
     {}
     
     ACTION init();
     ACTION announceroll(name creator, uint64_t creator_id, uint32_t upper_range_limit, name rake_recipient);
     ACTION announcebet(name creator, uint64_t creator_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier);
-    ACTION withdraw(name from, asset amount);
+    ACTION payoutbet(name from, asset amount);
+    ACTION withdraw(name from, uint64_t weight_to_withdraw);
     
     ACTION receiverand(uint64_t assoc_id, checksum256 random_value);
     [[eosio::on_notify("eosio.token::transfer")]] void receivetransfer(name from, name to, asset quantity, std::string memo);
   
     ACTION logannounce(uint64_t roll_id, name creator, uint64_t creator_id, uint32_t upper_range_limit, name rake_recipient);
     ACTION logbet(uint64_t roll_id, uint64_t bet_id, name creator, uint64_t creator_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier);
+    ACTION logwithdraw(name investor, uint64_t weight_to_withdraw, asset amount);
   
     
     TABLE rollStruct {
@@ -60,11 +63,20 @@ CONTRACT pinkbankroll : public contract {
     
     TABLE investorStruct {
       name investor;
-      asset bankroll_weight;
+      uint64_t bankroll_weight;
       
       uint64_t primary_key() const { return investor.value; }
     };
     typedef multi_index<"investors"_n, investorStruct> investors_t;
+    
+    
+    TABLE payoutStruct {
+      name bettor;
+      asset outstanding_payout;
+      
+      uint64_t primary_key() const { return bettor.value; }
+    };
+    typedef multi_index<"payouts"_n, payoutStruct> payouts_t;
     
     
     TABLE statsStruct {
@@ -78,6 +90,7 @@ CONTRACT pinkbankroll : public contract {
     
     rolls_t rollsTable;
     investors_t investorsTable;
+    payouts_t payoutsTable;
     stats_t statsTable;
     
 };
