@@ -347,8 +347,8 @@ void pinkbankroll::receivetransfer(name from, name to, asset quantity, std::stri
   if (memo.compare("deposit") == 0) {
     handleDeposit(from, quantity);
     
-  } else if (memo.rfind("startroll ") == 0) {
-    int64_t firstWhitespace = memo.rfind(" ");
+  } else if (memo.find("startroll ") == 0) {
+    int64_t firstWhitespace = memo.find(" ");
     std::string idstring = memo.substr(firstWhitespace);
     uint64_t parsed_creator_id = std::strtoull(idstring.c_str(), 0, 10);
     
