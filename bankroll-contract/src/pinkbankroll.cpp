@@ -21,6 +21,9 @@ ACTION pinkbankroll::init() {
 ACTION pinkbankroll::announceroll(name creator, uint64_t creator_id, uint32_t max_result, name rake_recipient) {
   require_auth(creator);
   
+  check(max_result != 0,
+  "max result can't be 0");
+  
   uint128_t creator_and_id = uint128_t{creator.value} << 64 | creator_id;
   auto rolls_by_creator_and_id = rollsTable.get_index<"creatorandid"_n>();
   auto itr_creator_and_id = rolls_by_creator_and_id.find(creator_and_id);
@@ -110,7 +113,7 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
   action(
     permission_level{_self, "active"_n},
     _self,
-    "logannounce"_n,
+    "logbet"_n,
     std::make_tuple(roll_id, bet_id, bettor, quantity, lower_bound, upper_bound, muliplier, random_seed)
   ).send();
 }
