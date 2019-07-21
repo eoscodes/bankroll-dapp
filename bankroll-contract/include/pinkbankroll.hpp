@@ -17,7 +17,7 @@ CONTRACT pinkbankroll : public contract {
     {}
     
     ACTION init();
-    ACTION announceroll(name creator, uint64_t creator_id, uint32_t upper_range_limit, name rake_recipient);
+    ACTION announceroll(name creator, uint64_t creator_id, uint32_t max_result, name rake_recipient);
     ACTION announcebet(name creator, uint64_t creator_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier, uint64_t random_seed);
     ACTION payoutbet(name from, asset amount);
     ACTION withdraw(name from, uint64_t weight_to_withdraw);
@@ -25,20 +25,20 @@ CONTRACT pinkbankroll : public contract {
     ACTION receiverand(uint64_t assoc_id, checksum256 random_value);
     [[eosio::on_notify("eosio.token::transfer")]] void receivetransfer(name from, name to, asset quantity, std::string memo);
   
-    ACTION logannounce(uint64_t roll_id, name creator, uint64_t creator_id, uint32_t upper_range_limit, name rake_recipient);
-    ACTION logbet(uint64_t roll_id, uint64_t bet_id, name creator, uint64_t creator_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier, uint64_t random_seed);
+    ACTION logannounce(uint64_t roll_id, name creator, uint64_t creator_id, uint32_t max_result, name rake_recipient);
+    ACTION logbet(uint64_t roll_id, uint64_t bet_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier, uint64_t random_seed);
     ACTION logstartroll(uint64_t roll_id, name creator, uint64_t creator_id);
-    ACTION loggetrand(uint64_t roll_id, uint32_t result, asset paid_out, checksum256 random_value);
-    ACTION logwithdraw(name investor, uint64_t weight_to_withdraw, asset amount);
+    ACTION loggetrand(uint64_t roll_id, uint32_t result, asset bankroll_change, checksum256 random_value);
+    //Bankroll increase/ decrease
+    ACTION logbrchange(asset change, std::string message);
   
     
     TABLE rollStruct {
       uint64_t roll_id;
       name creator;
       uint64_t creator_id;
-      uint32_t upper_range_limit;
+      uint32_t max_result;
       name rake_recipient;
-      asset total_amount;
       bool paid;
       
       uint64_t primary_key() const { return roll_id; }
@@ -54,7 +54,7 @@ CONTRACT pinkbankroll : public contract {
     TABLE betStruct {
       uint64_t bet_id;
       name bettor;
-      asset amount;
+      asset quantity;
       uint32_t lower_bound;
       uint32_t upper_bound;
       uint32_t muliplier;
@@ -86,6 +86,7 @@ CONTRACT pinkbankroll : public contract {
     TABLE statsStruct {
       asset bankroll = asset(0, symbol("WAX", 8));
       uint64_t total_bankroll_weight = 0;
+      uint64_t current_roll_id = 0;
     };
     typedef singleton<"stats"_n, statsStruct> stats_t;
     // https://github.com/EOSIO/eosio.cdt/issues/280
@@ -96,4 +97,9 @@ CONTRACT pinkbankroll : public contract {
     investors_t investorsTable;
     payouts_t payoutsTable;
     stats_t statsTable;
+  
+  private:
+    void transferFromBankroll(name recipient, asset quantity, std::string memo);
+    void handleDeposit(name investor, asset quantity);
+    void handleStartRoll(name creator, uint64_t creator_id, asset quantity);
 };
