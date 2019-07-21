@@ -24,6 +24,8 @@ CONTRACT pinkbankroll : public contract {
     
     ACTION receiverand(uint64_t assoc_id, checksum256 random_value);
     [[eosio::on_notify("eosio.token::transfer")]] void receivetransfer(name from, name to, asset quantity, std::string memo);
+    
+    ACTION notifyresult(name creator, uint64_t creator_id, uint32_t result);
   
     ACTION logannounce(uint64_t roll_id, name creator, uint64_t creator_id, uint32_t max_result, name rake_recipient);
     ACTION logbet(uint64_t roll_id, uint64_t bet_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier, uint64_t random_seed);

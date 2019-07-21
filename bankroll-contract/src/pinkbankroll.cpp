@@ -90,6 +90,9 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
   check(upper_bound <= itr_creator_and_id->max_result,
   "upper_bound can't be greater than the max_result of the roll");
   
+  check(muliplier > 1000,
+  "the muliplier has to be greater than 1000 (greater than 1x)");
+  
   
   double odds = (double)(upper_bound - lower_bound + 1) / (double)(itr_creator_and_id->max_result);
   double ev = odds * muliplier / (double)1000;
@@ -225,6 +228,9 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
   check(rolls_itr->paid,
   "this roll has not been paid for yet");
   
+  name roll_creator = rolls_itr->creator;
+  uint64_t roll_creator_id = rolls_itr->creator_id;
+  
   
   const auto random_array = random_value.get_array();
   //The first 128 bits of the random_value. The rest is not needed
@@ -235,10 +241,19 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
   
   rollBets_t betsTable(_self, assoc_id);
   
-  asset bankroll_change = asset(0, symbol("WAX", 8));
+  asset total_rake = asset(0, symbol("WAX", 8));
+  asset total_dev_fee = asset(0, symbol("WAX", 8));
+  asset bankroll_change = asset(0, symbol("WAX", 8)); //Disregarding rake/ fee
   
   auto bet_itr = betsTable.begin();
   while(bet_itr != betsTable.end()) {
+    //Calculating the rake/ fee to payouts
+    double ev = (double)bet_itr->muliplier / (double)1000 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)rolls_itr->max_result;
+    double edge = (double)1 - ev;
+    total_rake.amount += (int64_t)((double)bet_itr->quantity.amount * (edge - (double)0.01));
+    total_dev_fee.amount += (int64_t)((double)bet_itr->quantity.amount * (double)0.003);
+    
+    //Calculating the bet outcome
     bankroll_change += bet_itr->quantity;
     
     if (bet_itr->lower_bound <= result && result <= bet_itr->upper_bound) {
@@ -285,6 +300,10 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
   //Removing roll table entry
   rollsTable.erase(rolls_itr);
   
+  transferFromBankroll(rolls_itr->rake_recipient, total_rake, std::string("pinkbankroll rake"));
+  // TODO Insert real dev account
+  transferFromBankroll("eosio"_n, total_dev_fee, std::string("pinkbankroll devfee"));
+  
   action(
     permission_level{_self, "active"_n},
     _self,
@@ -297,6 +316,13 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
     _self,
     "logbrchange"_n,
     std::make_tuple(bankroll_change, std::string("roll result"))
+  ).send();
+  
+  action(
+    permission_level{_self, "active"_n},
+    _self,
+    "notifyresult"_n,
+    std::make_tuple(roll_creator, roll_creator_id, result)
   ).send();
 }
 
@@ -429,8 +455,7 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   uint64_t signing_value = itr_creator_and_id->roll_id;
   
   asset total_quantity_bet = asset(0, symbol("WAX", 8));
-  asset total_rake = asset(0, symbol("WAX", 8));
-  asset total_dev_fee = asset(0, symbol("WAX", 8));
+  asset total_bets_collected = asset(0, symbol("WAX", 8));  // = total_quantity_bet - (rake + fees)
   
   uint32_t max_range = itr_creator_and_id->max_result;
   ChainedRange firstRange = ChainedRange(1, max_range, 0);
@@ -438,10 +463,8 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   
   for (auto it = betsTable.begin(); it != betsTable.end(); it++) {
     total_quantity_bet += it->quantity;
-    double ev = (double)it->muliplier / (double)1000 * (double)(it->upper_bound - it->lower_bound + 1) / (double)max_range;
-    double edge = (double)1 - ev;
-    total_rake.amount += (int)((double)it->quantity.amount * (edge - (double)0.01));
-    total_dev_fee.amount += (int)((double)it->quantity.amount * (double)0.003);
+    double ev = (double)it->muliplier / (double)1000 * (double)(it->upper_bound - it->lower_bound + 1) / (double)itr_creator_and_id->max_result;
+    total_bets_collected.amount += (int64_t)((double)it->quantity.amount * (ev + (double)0.7));
     
     uint64_t payout = it->quantity.amount * it->muliplier / 1000;
     firstRange.insertBet(it->lower_bound, it->upper_bound, payout);
@@ -452,7 +475,6 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   check(quantity == total_quantity_bet,
   "quantity needs to be equal to the total quantity bet of the roll");
   
-  asset total_bets_collected = total_quantity_bet - total_rake - total_dev_fee;
   asset required_bankroll = getRequiredBankroll(firstRange, total_bets_collected.amount, max_range);
   statsStruct stats = statsTable.get();
   check(stats.bankroll >= required_bankroll,
@@ -476,13 +498,18 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   "logstartroll"_n,
   std::make_tuple(itr_creator_and_id->roll_id, creator, creator_id)
   ).send();
-  
-  transferFromBankroll(itr_creator_and_id->rake_recipient, total_rake, std::string("pinkbankroll rake"));
-  // TODO Insert real dev account
-  transferFromBankroll("eosio"_n, total_dev_fee, std::string("pinkbankroll devfee"));
 }
 
 
+
+/**
+ * This action is used to notify the creator of a roll of the result.
+ * require_recipient is used instead of an inline action, in order not to allow the called contract to use the bankroll's RAM
+ */
+ACTION pinkbankroll::notifyresult(name creator, uint64_t creator_id, uint32_t result) {
+  require_auth(_self);
+  require_recipient(creator);
+}
 
 
 
