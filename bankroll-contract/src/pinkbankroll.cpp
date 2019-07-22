@@ -19,6 +19,9 @@ ACTION pinkbankroll::init() {
  * @param rake_recipient - The name of the account that will receive the rake payment for this roll
  */
 ACTION pinkbankroll::announceroll(name creator, uint64_t creator_id, uint32_t max_result, name rake_recipient) {
+  check(!isPaused(),
+  "the contract is paused, only withdrawals and payouts are currently allowed");
+  
   require_auth(creator);
   
   check(max_result != 0,
@@ -69,6 +72,9 @@ ACTION pinkbankroll::announceroll(name creator, uint64_t creator_id, uint32_t ma
  *                      Users are highly encouraged to send actual (pseudo) random values here to avoid later collisions in the rng oracle
  */
 ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier, uint64_t random_seed) {
+  check(!isPaused(),
+  "the contract is paused, only withdrawals and payouts are currently allowed");
+  
   require_auth(creator);
   
   uint128_t creator_and_id = uint128_t{creator.value} << 64 | creator_id;
@@ -212,6 +218,23 @@ ACTION pinkbankroll::withdraw(name from, uint64_t weight_to_withdraw) {
     std::make_tuple(-wax_to_withdraw, std::string("bankroll withdraw"))
   ).send();
 }
+
+
+
+
+/**
+ * @dev Can be called by the dev account to pause/ unpause the contract.
+ * This should hopefully never have to be used, but acts as an emergency stop if it is ever needed
+ * Withdrawals and Payouts are still enabled when paused, but no new rolls/ bets will be accepted
+ * 
+ * @param paused - The bool value to pause/ unpause the contract
+ */
+ACTION pinkbankroll::setpaused(bool paused) {
+  statsStruct stats = statsTable.get();
+  stats.paused = paused;
+  statsTable.set(stats, _self);
+}
+
 
 
 
@@ -406,6 +429,9 @@ void pinkbankroll::transferFromBankroll(name recipient, asset quantity, std::str
  * while the proportional bankroll weight of every investor changes correctly
  */
 void pinkbankroll::handleDeposit(name investor, asset quantity) {
+  check(!isPaused(),
+  "the contract is paused, only withdrawals and payouts are currently allowed");
+  
   statsStruct stats = statsTable.get();
     
   uint64_t added_bankroll_weight;
@@ -451,6 +477,8 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
  * @param quantity - The amount of WAX that was sent with this transaction. Needs to be equal to the total quantity bet in this roll
  */
 void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quantity) {
+  check(!isPaused(),
+  "the contract is paused, only withdrawals and payouts are currently allowed");
   
   uint128_t creator_and_id = uint128_t{creator.value} << 64 | creator_id;
   auto rolls_by_creator_and_id = rollsTable.get_index<"creatorandid"_n>();
@@ -507,6 +535,14 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   "logstartroll"_n,
   std::make_tuple(itr_creator_and_id->roll_id, creator, creator_id)
   ).send();
+}
+
+
+
+
+bool pinkbankroll::isPaused() {
+  statsStruct stats = statsTable.get();
+  return stats.paused;
 }
 
 

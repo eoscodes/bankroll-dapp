@@ -21,6 +21,7 @@ CONTRACT pinkbankroll : public contract {
     ACTION announcebet(name creator, uint64_t creator_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier, uint64_t random_seed);
     ACTION payoutbet(name from, asset amount);
     ACTION withdraw(name from, uint64_t weight_to_withdraw);
+    ACTION setpaused(bool paused);
     
     ACTION receiverand(uint64_t assoc_id, checksum256 random_value);
     [[eosio::on_notify("eosio.token::transfer")]] void receivetransfer(name from, name to, asset quantity, std::string memo);
@@ -89,6 +90,7 @@ CONTRACT pinkbankroll : public contract {
       asset bankroll = asset(0, symbol("WAX", 8));
       uint64_t total_bankroll_weight = 0;
       uint64_t current_roll_id = 0;
+      bool paused = false;
     };
     typedef singleton<"stats"_n, statsStruct> stats_t;
     // https://github.com/EOSIO/eosio.cdt/issues/280
@@ -104,4 +106,5 @@ CONTRACT pinkbankroll : public contract {
     void transferFromBankroll(name recipient, asset quantity, std::string memo);
     void handleDeposit(name investor, asset quantity);
     void handleStartRoll(name creator, uint64_t creator_id, asset quantity);
+    bool isPaused();
 };
