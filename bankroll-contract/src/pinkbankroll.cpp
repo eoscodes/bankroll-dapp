@@ -95,6 +95,8 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
   
   
   double odds = (double)(upper_bound - lower_bound + 1) / (double)(itr_creator_and_id->max_result);
+  check (odds >= (double)0.005,
+  "the odds cant be smaller than 0.005");
   double ev = odds * muliplier / (double)1000;
   check(ev <= 0.99,
   "the bet cant have an EV greater than 0.99 * quantity");
@@ -429,6 +431,13 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
       i.bankroll_weight = added_bankroll_weight;
     });
   }
+  
+  action(
+    permission_level{_self, "active"_n},
+    _self,
+    "logbrchange"_n,
+    std::make_tuple(quantity, std::string("bankroll deposit"))
+  ).send();
 }
 
 
@@ -464,7 +473,7 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   for (auto it = betsTable.begin(); it != betsTable.end(); it++) {
     total_quantity_bet += it->quantity;
     double ev = (double)it->muliplier / (double)1000 * (double)(it->upper_bound - it->lower_bound + 1) / (double)itr_creator_and_id->max_result;
-    total_bets_collected.amount += (int64_t)((double)it->quantity.amount * (ev + (double)0.7));
+    total_bets_collected.amount += (int64_t)((double)it->quantity.amount * (ev + (double)0.007));
     
     uint64_t payout = it->quantity.amount * it->muliplier / 1000;
     firstRange.insertBet(it->lower_bound, it->upper_bound, payout);

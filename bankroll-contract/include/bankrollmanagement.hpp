@@ -77,9 +77,6 @@ asset getRequiredBankroll(ChainedRange firstRange, uint64_t totalBetAmount, uint
   ChainedRange* currentRangePtr = &firstRange;
   while (currentRangePtr != nullptr) {
     
-    //TODO remove, debug
-    //eosio::print(currentRangePtr->lowerBound, " - ", currentRangePtr->upperBound, " - ", currentRangePtr->payout, " ||| ");
-    
     //Only losing ranges are considered
     if (currentRangePtr->payout > totalBetAmount) {
       //dds of this range winning
