@@ -25,6 +25,7 @@ CONTRACT pinkgambling : public contract {
     ACTION lognewcycle(uint64_t roll_id, uint32_t max_result, name rake_recipient, uint32_t cycle_time);
     ACTION logfastbet(uint64_t roll_id, asset quantity, name bettor, uint32_t muliplier, uint32_t lower_bound, uint32_t upper_bound, name rake_recipient, uint64_t identifier, uint64_t random_seed);
   
+  private:
     
     TABLE rollStruct {
       uint64_t roll_id;
@@ -75,7 +76,6 @@ CONTRACT pinkgambling : public contract {
     rolls_t rollsTable;
     stats_t statsTable;
   
-  private:
     void createCycle(uint32_t max_result, name rake_recipient, uint32_t cycle_time);
     void quickBet(asset quantity, name bettor, uint32_t muliplier, uint32_t lower_bound, uint32_t upper_bound, name rake_recipient, uint64_t identifier, uint64_t random_seed);
     void addBet(asset quantity, uint64_t roll_id, name bettor, uint32_t muliplier, uint32_t lower_bound, uint32_t upper_bound, uint64_t random_seed);

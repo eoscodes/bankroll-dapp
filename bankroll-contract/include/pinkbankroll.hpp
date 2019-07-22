@@ -35,6 +35,7 @@ CONTRACT pinkbankroll : public contract {
     //Bankroll increase/ decrease
     ACTION logbrchange(asset change, std::string message);
   
+  private:
     
     TABLE rollStruct {
       uint64_t roll_id;
@@ -102,7 +103,6 @@ CONTRACT pinkbankroll : public contract {
     payouts_t payoutsTable;
     stats_t statsTable;
   
-  private:
     void transferFromBankroll(name recipient, asset quantity, std::string memo);
     void handleDeposit(name investor, asset quantity);
     void handleStartRoll(name creator, uint64_t creator_id, asset quantity);
