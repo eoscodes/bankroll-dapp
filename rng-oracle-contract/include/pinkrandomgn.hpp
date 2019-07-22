@@ -19,8 +19,7 @@ CONTRACT pinkrandomgn : public contract {
     ACTION requestrand(uint64_t assoc_id, uint64_t signing_value, name caller);
     ACTION setrand(uint64_t job_id, signature sig);
     ACTION setpubkey(public_key pub_key);
-    
-    ACTION testverify(public_key pub_key, checksum256 value, signature sig);
+    ACTION setpaused(bool paused);
     
   private:
   

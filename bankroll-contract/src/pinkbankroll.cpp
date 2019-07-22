@@ -230,6 +230,7 @@ ACTION pinkbankroll::withdraw(name from, uint64_t weight_to_withdraw) {
  * @param paused - The bool value to pause/ unpause the contract
  */
 ACTION pinkbankroll::setpaused(bool paused) {
+  require_auth("pinknetworkx"_n);
   statsStruct stats = statsTable.get();
   stats.paused = paused;
   statsTable.set(stats, _self);
@@ -326,8 +327,7 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
   rollsTable.erase(rolls_itr);
   
   transferFromBankroll(rolls_itr->rake_recipient, total_rake, std::string("pinkbankroll rake"));
-  // TODO Insert real dev account
-  transferFromBankroll("eosio"_n, total_dev_fee, std::string("pinkbankroll devfee"));
+  transferFromBankroll("pinknetworkx"_n, total_dev_fee, std::string("pinkbankroll devfee"));
   
   action(
     permission_level{_self, "active"_n},

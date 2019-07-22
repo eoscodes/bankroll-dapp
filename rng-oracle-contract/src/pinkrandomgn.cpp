@@ -92,6 +92,23 @@ ACTION pinkrandomgn::setpubkey(public_key pub_key) {
 
 
 
+/**
+ * @dev Can be called by the dev account to pause/ unpause the contract.
+ * This should hopefully never have to be used, but acts as an emergency stop if it is ever needed
+ * Withdrawals and Payouts are still enabled when paused, but no new rolls/ bets will be accepted
+ * 
+ * @param paused - The bool value to pause/ unpause the contract
+ */
+ACTION pinkrandomgn::setpaused(bool paused) {
+  require_auth("pinknetworkx"_n);
+  configStruct config = configTable.get();
+  config.paused = paused;
+  configTable.set(config, _self);
+}
+
+
+
+
 bool pinkrandomgn::pinkrandomgn::isPaused() {
   configStruct config = configTable.get();
   return config.paused;
