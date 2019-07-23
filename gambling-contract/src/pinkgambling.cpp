@@ -388,7 +388,7 @@ void pinkgambling::handleResult(uint64_t roll_id, uint32_t result) {
     permission_level{_self, "active"_n},
     _self,
     "logresult"_n,
-    std::make_tuple(roll_id, roll_itr->cycle_number, roll_itr->max_result, roll_itr->rake_recipient, result, roll_itr->identifier)
+    std::make_tuple(roll_id, roll_itr->cycle_number, roll_itr->max_result, roll_itr->rake_recipient, result, roll_itr->identifier, roll_itr->cycle_time)
   ).send();
   
   //Removing all bet table entries
@@ -420,6 +420,6 @@ ACTION pinkgambling::logbet(uint64_t roll_id, uint64_t cycle_number, uint64_t be
   require_auth(_self);
 }
 
-ACTION pinkgambling::logresult(uint64_t roll_id, uint64_t cycle_number, uint32_t max_result, name rake_recipient, uint32_t roll_result, uint64_t identifier) {
+ACTION pinkgambling::logresult(uint64_t roll_id, uint64_t cycle_number, uint32_t max_result, name rake_recipient, uint32_t roll_result, uint64_t identifier, uint32_t cycle_time) {
   require_auth(_self);
 }
