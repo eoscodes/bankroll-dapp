@@ -21,9 +21,8 @@ CONTRACT pinkgambling : public contract {
     [[eosio::on_notify("eosio.token::transfer")]] void receivetransfer(name from, name to, asset quantity, std::string memo);
     [[eosio::on_notify("pinkbankroll::notifyresult")]] void receivenotifyresult(name creator, uint64_t creator_id, uint32_t result);
   
-    ACTION logresult(uint64_t roll_id, uint64_t cycle_id, uint32_t result, uint64_t identifier);
-    ACTION lognewcycle(uint64_t roll_id, uint32_t max_result, name rake_recipient, uint32_t cycle_time);
-    ACTION logfastbet(uint64_t roll_id, asset quantity, name bettor, uint32_t muliplier, uint32_t lower_bound, uint32_t upper_bound, name rake_recipient, uint64_t identifier, uint64_t random_seed);
+    ACTION logbet(uint64_t roll_id, uint64_t cycle_number, uint64_t bet_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier, uint64_t client_seed);
+    ACTION logresult(uint64_t roll_id, uint64_t cycle_number, uint32_t max_result, name rake_recipient, uint32_t roll_result, uint64_t identifier);
   
   private:
     
@@ -35,6 +34,7 @@ CONTRACT pinkgambling : public contract {
       uint64_t identifier;    //only used for single bets, not for cycles
       uint64_t cycle_number;  //0 when roll is not cyclic
       time_point last_cycle;  //0 when roll is not cyclic
+      time_point last_player_joined; //0 when roll is not cyclic
       uint32_t cycle_time;    //0 when roll is not cyclic
       
       uint64_t primary_key() const { return roll_id; }

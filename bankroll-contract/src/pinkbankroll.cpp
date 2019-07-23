@@ -138,8 +138,12 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
  * 
  * @param from - The account name to payout a bet to
  * @param quantity - The amount of WAX to payout
+ * @param irrelevant - This is needed when creating the deferred actions calling this action
+ *                     The bet_id is passed, but it is not used in this function. Instead, it is required to ensure
+ *                     that two different bets always call this function with different parameters
+ *                     Otherwise, the function creating the deffered actions might throw, if two bets with equal parameters 
  */
-ACTION pinkbankroll::payoutbet(name from, asset quantity) {
+ACTION pinkbankroll::payoutbet(name from, asset quantity, uint64_t irrelevant) {
   check(has_auth(from) || has_auth(_self),
   "transaction doesn't have the required permission");
   
@@ -152,7 +156,7 @@ ACTION pinkbankroll::payoutbet(name from, asset quantity) {
   check(payout_itr != payoutsTable.end(),
   "the account has no outstanding payouts");
   
-  check(payout_itr->outstanding_payout <= quantity,
+  check(payout_itr->outstanding_payout >= quantity,
   "the account doesn't have that many outstanding payouts");
   
   if (payout_itr->outstanding_payout == quantity) {
@@ -210,13 +214,6 @@ ACTION pinkbankroll::withdraw(name from, uint64_t weight_to_withdraw) {
   statsTable.set(stats, _self);
   
   transferFromBankroll(from, wax_to_withdraw, std::string("bankroll withdraw"));
-  
-  action(
-    permission_level{_self, "active"_n},
-    _self,
-    "logbrchange"_n,
-    std::make_tuple(-wax_to_withdraw, std::string("bankroll withdraw"))
-  ).send();
 }
 
 
@@ -246,7 +243,7 @@ ACTION pinkbankroll::setpaused(bool paused) {
  * @param random_value - The sha256 hash of the random seed that was provided when starting the roll. Is used as randomness
  */
 ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
-  require_auth("orng.wax"_n);
+  require_auth("pinkrandomgn"_n);
   
   auto rolls_itr = rollsTable.find(assoc_id);
   check(rolls_itr != rollsTable.end(),
@@ -302,17 +299,20 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
       
       //Deferred transactions have to be used in order to guarantee that no single bet can make the whole payout throw
       //They are however not 100% guaranteed to go through. Therefore, users can also manually withdraw their bets with the payoutbet action
+      
       eosio::transaction t;
       t.actions.emplace_back(
         permission_level(_self, "active"_n),
         _self,
         "payoutbet"_n,
-        std::make_tuple(bet_itr->bettor, quantity_won)
+        std::make_tuple(bet_itr->bettor, quantity_won, bet_itr->bet_id)
       );
       
       uint64_t deferred_id = (assoc_id << 8) + bet_itr->bet_id;
       t.send(deferred_id, _self);
+      
     }
+    
     
     //Removing bet table entry
     //erase returns iterator poiting to next entry
@@ -340,7 +340,7 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
     permission_level{_self, "active"_n},
     _self,
     "logbrchange"_n,
-    std::make_tuple(bankroll_change, std::string("roll result"))
+    std::make_tuple(bankroll_change, std::string("roll result"), stats.bankroll)
   ).send();
   
   action(
@@ -401,7 +401,7 @@ void pinkbankroll::transferFromBankroll(name recipient, asset quantity, std::str
     permission_level{_self, "active"_n},
     _self,
     "logbrchange"_n,
-    std::make_tuple(-quantity, memo)
+    std::make_tuple(-quantity, memo, stats.bankroll)
   ).send();
   
   action(
@@ -462,7 +462,7 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
     permission_level{_self, "active"_n},
     _self,
     "logbrchange"_n,
-    std::make_tuple(quantity, std::string("bankroll deposit"))
+    std::make_tuple(quantity, std::string("bankroll deposit"), stats.bankroll)
   ).send();
 }
 
@@ -524,7 +524,7 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   print(signing_value);
   action(
     permission_level{_self, "active"_n},
-    "orng.wax"_n,
+    "pinkrandomgn"_n,
     "requestrand"_n,
     std::make_tuple(itr_creator_and_id->roll_id, signing_value, _self)
   ).send();
@@ -576,6 +576,6 @@ ACTION pinkbankroll::loggetrand(uint64_t roll_id, uint32_t result, asset bankrol
   require_auth(_self);
 }
 
-ACTION pinkbankroll::logbrchange(asset change, std::string message) {
+ACTION pinkbankroll::logbrchange(asset change, std::string message, asset new_bankroll) {
   require_auth(_self);
 }

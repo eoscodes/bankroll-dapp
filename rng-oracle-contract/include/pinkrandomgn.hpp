@@ -46,6 +46,7 @@ CONTRACT pinkrandomgn : public contract {
     
     TABLE configStruct {
       public_key pub_key;
+      //uint64_t current_job_id;
       bool paused = false;
     };
     typedef singleton<"config"_n, configStruct> config_t;

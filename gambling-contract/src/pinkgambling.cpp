@@ -172,6 +172,8 @@ void pinkgambling::receivenotifyresult(name creator, uint64_t creator_id, uint32
  * @param cycle_time - The time in seconds that each cycle should last for
  */
 void pinkgambling::createCycle(uint32_t max_result, name rake_recipient, uint32_t cycle_time) {
+  check(cycle_time >= 10,
+  "the cycle time must be at last 10 seconds");
   //available_primary_key can't be used, because finished rolls are deleted from the table
   statsStruct stats = statsTable.get();
   uint64_t roll_id = stats.current_roll_id++;
@@ -185,6 +187,7 @@ void pinkgambling::createCycle(uint32_t max_result, name rake_recipient, uint32_
     r.identifier = 0;
     r.cycle_number = 1;
     r.last_cycle = current_time_point();
+    r.last_player_joined = current_time_point();
     r.cycle_time = cycle_time;
   });
   
@@ -192,14 +195,7 @@ void pinkgambling::createCycle(uint32_t max_result, name rake_recipient, uint32_
     permission_level{_self, "active"_n},
     "eosio.token"_n,
     "transfer"_n,
-    std::make_tuple(_self, "eosio"_n, asset(1000000000, symbol("WAX", 8)), std::string("payment for new cycle"))
-  ).send();
-  
-  action(
-    permission_level{_self, "active"_n},
-    _self,
-    "lognewcycle"_n,
-    std::make_tuple(roll_id, max_result, rake_recipient, cycle_time)
+    std::make_tuple(_self, "pinknetworkx"_n, asset(1000000000, symbol("WAX", 8)), std::string("payment for new cycle"))
   ).send();
 }
 
@@ -232,18 +228,12 @@ void pinkgambling::quickBet(asset quantity, name bettor, uint32_t muliplier, uin
     r.identifier = identifier;
     r.cycle_number = 0;
     r.last_cycle = eosio::time_point(microseconds(0));
+    r.last_player_joined = eosio::time_point(microseconds(0));
     r.cycle_time = 0;
   });
   
   addBet(quantity, roll_id, bettor, muliplier, lower_bound, upper_bound, random_seed);
   sendRoll(roll_id);
-  
-  action(
-    permission_level{_self, "active"_n},
-    _self,
-    "logfastbet"_n,
-    std::make_tuple(roll_id, quantity, bettor, muliplier, lower_bound, upper_bound, rake_recipient, identifier, random_seed)
-  ).send();
 }
 
 
@@ -264,6 +254,11 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
   auto roll_itr = rollsTable.find(roll_id);
   check(roll_itr != rollsTable.end(),
   "no roll with this id exist");
+  check(!roll_itr->waiting_for_result,
+  "cant join while the roll is waiting for a result");
+  rollsTable.modify(roll_itr, _self, [&](auto& r) {
+    r.last_player_joined = current_time_point();
+  });
   
   
   check(lower_bound >= 1,
@@ -284,8 +279,9 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
   "the bet cant have an EV greater than 0.99 * quantity");
   
   rollBets_t betsTable(_self, roll_id);
+  uint64_t bet_id = betsTable.available_primary_key();
   betsTable.emplace(_self, [&](betStruct &b) {
-    b.bet_id = betsTable.available_primary_key();
+    b.bet_id = bet_id;
     b.bettor = bettor;
     b.quantity = quantity;
     b.lower_bound = lower_bound;
@@ -311,6 +307,13 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
   bankrollStatsStruct bankroll_stats = bankrollStatsTable.get();
   check(bankroll_stats.bankroll >= required_bankroll,
   "the current bankroll is too small to accept this roll");
+  
+  action(
+    permission_level{_self, "active"_n},
+    _self,
+    "logbet"_n,
+    std::make_tuple(roll_id, roll_itr->cycle_number, bet_id, bettor, quantity, lower_bound, upper_bound, muliplier, random_seed)
+  ).send();
 }
 
 
@@ -385,7 +388,7 @@ void pinkgambling::handleResult(uint64_t roll_id, uint32_t result) {
     permission_level{_self, "active"_n},
     _self,
     "logresult"_n,
-    std::make_tuple(roll_id, roll_itr->cycle_number, result, roll_itr->identifier)
+    std::make_tuple(roll_id, roll_itr->cycle_number, roll_itr->max_result, roll_itr->rake_recipient, result, roll_itr->identifier)
   ).send();
   
   //Removing all bet table entries
@@ -404,6 +407,7 @@ void pinkgambling::handleResult(uint64_t roll_id, uint32_t result) {
     //Cycle roll
     rollsTable.modify(roll_itr, _self, [&](auto& r) {
       r.cycle_number += 1;
+      r.waiting_for_result = false;
       r.last_cycle = current_time_point();
     });
   }
@@ -412,15 +416,10 @@ void pinkgambling::handleResult(uint64_t roll_id, uint32_t result) {
 
 //Only for external logging
 
-
-ACTION pinkgambling::logresult(uint64_t roll_id, uint64_t cycle_id, uint32_t result, uint64_t identifier) {
+ACTION pinkgambling::logbet(uint64_t roll_id, uint64_t cycle_number, uint64_t bet_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier, uint64_t client_seed) {
   require_auth(_self);
 }
 
-ACTION pinkgambling::lognewcycle(uint64_t roll_id, uint32_t max_result, name rake_recipient, uint32_t cycle_time) {
-  require_auth(_self);
-}
-
-ACTION pinkgambling::logfastbet(uint64_t roll_id, asset quantity, name bettor, uint32_t muliplier, uint32_t lower_bound, uint32_t upper_bound, name rake_recipient, uint64_t identifier, uint64_t random_seed) {
+ACTION pinkgambling::logresult(uint64_t roll_id, uint64_t cycle_number, uint32_t max_result, name rake_recipient, uint32_t roll_result, uint64_t identifier) {
   require_auth(_self);
 }

@@ -8,6 +8,7 @@ ACTION pinkrandomgn::init() {
 
 
 
+
 /**
  * External contracts can call this function to request a random value
  * The provided signing_value value is hashed with sha256, and the resulting hash is saved.
@@ -27,12 +28,19 @@ ACTION pinkrandomgn::requestrand(uint64_t assoc_id, uint64_t signing_value, name
   check(seed_itr == usedSeedsTable.end(),
   "signing value already used");
   
+  usedSeedsTable.emplace(caller, [&](auto& s) {
+    s.seed = signing_value;
+  });
+  
+  configStruct config = configTable.get();
+  //uint64_t id = config.current_job_id;
+  
   openJobsTable.emplace(caller, [&](auto& j){
-    j.id = openJobsTable.available_primary_key();
+    j.id = 0;
     j.caller = caller;
     j.assoc_id = assoc_id;
     j.signing_value = signing_value;
-    j.signing_hash = sha256((const char *)signing_value, 8);
+    j.signing_hash = sha256((const char *)&signing_value, 8);
   });
 }
 
@@ -67,6 +75,8 @@ ACTION pinkrandomgn::setrand(uint64_t job_id, signature sig) {
     "receiverand"_n,
     std::make_tuple(job_itr->assoc_id, random_hash)
   ).send();
+  
+  openJobsTable.erase(job_itr);
   
 }
 
