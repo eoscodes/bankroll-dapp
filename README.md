@@ -1,6 +1,6 @@
 # bankroll-dapp
 
-The documentation will be released as soon as the Dapp is deployed.
+The documentation will soon be released. Stay tuned.
 
 Follow us on twitter and we will keep you up-to-date
 https://twitter.com/pinknetworkx
