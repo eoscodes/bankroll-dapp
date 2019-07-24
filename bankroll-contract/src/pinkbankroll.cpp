@@ -67,11 +67,11 @@ ACTION pinkbankroll::announceroll(name creator, uint64_t creator_id, uint32_t ma
  * @param quantity - The quantity of WAX to be wagered
  * @param lower_bound - The lower bound of the range to bet on
  * @param upper_bound - The upper bound of the range to bet on
- * @param muliplier - The muliplier of this bet x 1000 (muliplier = 2000 -> 2x payout)
+ * @param multiplier - The multiplier of this bet x 1000 (multiplier = 2000 -> 2x payout)
  * @param random_seed - The random_seed that will be included in the seed that will later be sent to the rng oracle.
  *                      Users are highly encouraged to send actual (pseudo) random values here to avoid later collisions in the rng oracle
  */
-ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier, uint64_t random_seed) {
+ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t multiplier, uint64_t random_seed) {
   check(!isPaused(),
   "the contract is paused, only withdrawals and payouts are currently allowed");
   
@@ -96,14 +96,14 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
   check(upper_bound <= itr_creator_and_id->max_result,
   "upper_bound can't be greater than the max_result of the roll");
   
-  check(muliplier > 1000,
-  "the muliplier has to be greater than 1000 (greater than 1x)");
+  check(multiplier > 1000,
+  "the multiplier has to be greater than 1000 (greater than 1x)");
   
   
   double odds = (double)(upper_bound - lower_bound + 1) / (double)(itr_creator_and_id->max_result);
   check (odds >= (double)0.005,
   "the odds cant be smaller than 0.005");
-  double ev = odds * muliplier / (double)1000;
+  double ev = odds * multiplier / (double)1000;
   check(ev <= 0.99,
   "the bet cant have an EV greater than 0.99 * quantity");
   
@@ -117,7 +117,7 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
     b.quantity = quantity;
     b.lower_bound = lower_bound;
     b.upper_bound = upper_bound;
-    b.muliplier = muliplier;
+    b.multiplier = multiplier;
     b.random_seed = random_seed;
   });
   
@@ -125,7 +125,7 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
     permission_level{_self, "active"_n},
     _self,
     "logbet"_n,
-    std::make_tuple(roll_id, bet_id, bettor, quantity, lower_bound, upper_bound, muliplier, random_seed)
+    std::make_tuple(roll_id, bet_id, bettor, quantity, lower_bound, upper_bound, multiplier, random_seed)
   ).send();
 }
 
@@ -271,7 +271,7 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
   auto bet_itr = betsTable.begin();
   while(bet_itr != betsTable.end()) {
     //Calculating the rake/ fee to payouts
-    double ev = (double)bet_itr->muliplier / (double)1000 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)rolls_itr->max_result;
+    double ev = (double)bet_itr->multiplier / (double)1000 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)rolls_itr->max_result;
     double edge = (double)1 - ev;
     total_rake.amount += (int64_t)((double)bet_itr->quantity.amount * (edge - (double)0.01));
     total_dev_fee.amount += (int64_t)((double)bet_itr->quantity.amount * (double)0.003);
@@ -281,7 +281,7 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
     
     if (bet_itr->lower_bound <= result && result <= bet_itr->upper_bound) {
       //This bet won
-      asset quantity_won = bet_itr->quantity * bet_itr->muliplier / 1000;
+      asset quantity_won = bet_itr->quantity * bet_itr->multiplier / 1000;
       bankroll_change -= quantity_won;
       
       //Updating payouts table
@@ -500,10 +500,10 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   
   for (auto it = betsTable.begin(); it != betsTable.end(); it++) {
     total_quantity_bet += it->quantity;
-    double ev = (double)it->muliplier / (double)1000 * (double)(it->upper_bound - it->lower_bound + 1) / (double)itr_creator_and_id->max_result;
+    double ev = (double)it->multiplier / (double)1000 * (double)(it->upper_bound - it->lower_bound + 1) / (double)itr_creator_and_id->max_result;
     total_bets_collected.amount += (int64_t)((double)it->quantity.amount * (ev + (double)0.007));
     
-    uint64_t payout = it->quantity.amount * it->muliplier / 1000;
+    uint64_t payout = it->quantity.amount * it->multiplier / 1000;
     firstRange.insertBet(it->lower_bound, it->upper_bound, payout);
     
     signing_value = signing_value ^ it->random_seed;
@@ -564,7 +564,7 @@ ACTION pinkbankroll::logannounce(uint64_t roll_id, name creator, uint64_t creato
   require_auth(_self);
 }
 
-ACTION pinkbankroll::logbet(uint64_t roll_id, uint64_t bet_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier, uint64_t random_seed) {
+ACTION pinkbankroll::logbet(uint64_t roll_id, uint64_t bet_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t multiplier, uint64_t random_seed) {
   require_auth(_self);
 }
 
