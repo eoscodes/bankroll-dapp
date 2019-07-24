@@ -112,8 +112,8 @@ void pinkgambling::receivetransfer(name from, name to, asset quantity, std::stri
     uint32_t parsed_lower_bound = std::strtoull(substrings[1].c_str(), 0, 10);
     uint32_t parsed_upper_bound = std::strtoull(substrings[2].c_str(), 0, 10);
     name parsed_rake_recipient = name(substrings[3]);
-    uint32_t parsed_identifier = std::strtoull(substrings[4].c_str(), 0, 16);
-    uint32_t parsed_random_seed = std::strtoull(substrings[5].c_str(), 0, 16);
+    uint64_t parsed_identifier = std::strtoull(substrings[4].c_str(), 0, 16);
+    uint64_t parsed_random_seed = std::strtoull(substrings[5].c_str(), 0, 16);
     
     quickBet(quantity, from, parsed_multiplier, parsed_lower_bound, parsed_upper_bound, parsed_rake_recipient, parsed_identifier, parsed_random_seed);
     
@@ -135,7 +135,7 @@ void pinkgambling::receivetransfer(name from, name to, asset quantity, std::stri
     uint32_t parsed_multiplier = std::strtoull(substrings[1].c_str(), 0, 10);
     uint32_t parsed_lower_bound = std::strtoull(substrings[2].c_str(), 0, 10);
     uint32_t parsed_upper_bound = std::strtoull(substrings[3].c_str(), 0, 10);
-    uint32_t parsed_random_seed = std::strtoull(substrings[4].c_str(), 0, 16);
+    uint64_t parsed_random_seed = std::strtoull(substrings[4].c_str(), 0, 16);
     
     addBet(quantity, parsed_roll_id, from, parsed_multiplier, parsed_lower_bound, parsed_upper_bound, parsed_random_seed);
     
@@ -207,14 +207,14 @@ void pinkgambling::createCycle(uint32_t max_result, name rake_recipient, uint32_
  * 
  * @param quantity - The amount of WAX to be bet
  * @param bettor - The account name of the bettor
- * @param muliplier - The muliplier of the bet x1000 (muliplier 2000 => 2x payout)
+ * @param multiplier - The multiplier of the bet x1000 (multiplier 2000 => 2x payout)
  * @param lower_bound - The lower bound of the range to bet on
  * @param upper_bound - The upper bound of the range to bet on
  * @param rake_recipient - The account name to receive the rake for this bet
  * @param identifier - An identifier used for tracking this bet, but generally not used for the smart contact logic
  * @param client_seed - A seed that will be used in the bankroll contract. Should be random to avoid possible collisions in the RNG oracle
  */
-void pinkgambling::quickBet(asset quantity, name bettor, uint32_t muliplier, uint32_t lower_bound, uint32_t upper_bound, name rake_recipient, uint64_t identifier, uint64_t random_seed)  {
+void pinkgambling::quickBet(asset quantity, name bettor, uint32_t multiplier, uint32_t lower_bound, uint32_t upper_bound, name rake_recipient, uint64_t identifier, uint64_t random_seed)  {
   //available_primary_key can't be used, because finished rolls are deleted from the table
   statsStruct stats = statsTable.get();
   uint64_t roll_id = stats.current_roll_id++;
@@ -232,7 +232,7 @@ void pinkgambling::quickBet(asset quantity, name bettor, uint32_t muliplier, uin
     r.cycle_time = 0;
   });
   
-  addBet(quantity, roll_id, bettor, muliplier, lower_bound, upper_bound, random_seed);
+  addBet(quantity, roll_id, bettor, multiplier, lower_bound, upper_bound, random_seed);
   sendRoll(roll_id);
 }
 
@@ -246,11 +246,11 @@ void pinkgambling::quickBet(asset quantity, name bettor, uint32_t muliplier, uin
  * 
  * @param quantity - The amount of WAX to be bet
  * @param bettor - The account name of the bettor
- * @param muliplier - The muliplier of the bet x1000 (muliplier 2000 => 2x payout)
+ * @param multiplier - The multiplier of the bet x1000 (multiplier 2000 => 2x payout)
  * @param lower_bound - The lower bound of the range to bet on
  * @param upper_bound - The upper bound of the range to bet on
  */
-void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_t muliplier, uint32_t lower_bound, uint32_t upper_bound, uint64_t random_seed) {
+void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_t multiplier, uint32_t lower_bound, uint32_t upper_bound, uint64_t random_seed) {
   auto roll_itr = rollsTable.find(roll_id);
   check(roll_itr != rollsTable.end(),
   "no roll with this id exist");
@@ -268,13 +268,13 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
   check(upper_bound <= roll_itr->max_result,
   "upper_bound can't be greater than the max_result of the roll");
   
-  check(muliplier > 1000,
-  "the muliplier has to be greater than 1000 (greater than 1x)");
+  check(multiplier > 1000,
+  "the multiplier has to be greater than 1000 (greater than 1x)");
   
   double odds = (double)(upper_bound - lower_bound + 1) / (double)roll_itr->max_result;
   check (odds >= (double)0.005,
   "the odds cant be smaller than 0.005");
-  double ev = odds * muliplier / (double)1000;
+  double ev = odds * multiplier / (double)1000;
   check(ev <= 0.99,
   "the bet cant have an EV greater than 0.99 * quantity");
   
@@ -286,7 +286,7 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
     b.quantity = quantity;
     b.lower_bound = lower_bound;
     b.upper_bound = upper_bound;
-    b.muliplier = muliplier;
+    b.multiplier = multiplier;
     b.random_seed = random_seed;
   });
   
@@ -294,10 +294,10 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
   asset total_bets_collected = asset(0, symbol("WAX", 8));  // = total_quantity_bet - (rake + fees)
   
   for (auto bet_itr = betsTable.begin(); bet_itr != betsTable.end(); bet_itr++) {
-    double ev = (double)bet_itr->muliplier / (double)1000 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)roll_itr->max_result;
+    double ev = (double)bet_itr->multiplier / (double)1000 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)roll_itr->max_result;
     total_bets_collected.amount += (int64_t)((double)bet_itr->quantity.amount * (ev + (double)0.007));
     
-    uint64_t payout = bet_itr->quantity.amount * bet_itr->muliplier / 1000;
+    uint64_t payout = bet_itr->quantity.amount * bet_itr->multiplier / 1000;
     firstRange.insertBet(bet_itr->lower_bound, bet_itr->upper_bound, payout);
   }
   
@@ -312,7 +312,7 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
     permission_level{_self, "active"_n},
     _self,
     "logbet"_n,
-    std::make_tuple(roll_id, roll_itr->cycle_number, bet_id, bettor, quantity, lower_bound, upper_bound, muliplier, random_seed)
+    std::make_tuple(roll_id, roll_itr->cycle_number, bet_id, bettor, quantity, lower_bound, upper_bound, multiplier, random_seed)
   ).send();
 }
 
@@ -353,7 +353,7 @@ void pinkgambling::sendRoll(uint64_t roll_id) {
     permission_level{_self, "active"_n},
       "pinkbankroll"_n,
       "announcebet"_n,
-      std::make_tuple(_self, roll_id, bet_itr->bettor, bet_itr->quantity, bet_itr->lower_bound, bet_itr->upper_bound, bet_itr->muliplier, bet_itr->random_seed)
+      std::make_tuple(_self, roll_id, bet_itr->bettor, bet_itr->quantity, bet_itr->lower_bound, bet_itr->upper_bound, bet_itr->multiplier, bet_itr->random_seed)
     ).send();
   }
   
@@ -388,7 +388,7 @@ void pinkgambling::handleResult(uint64_t roll_id, uint32_t result) {
     permission_level{_self, "active"_n},
     _self,
     "logresult"_n,
-    std::make_tuple(roll_id, roll_itr->cycle_number, roll_itr->max_result, roll_itr->rake_recipient, result, roll_itr->identifier)
+    std::make_tuple(roll_id, roll_itr->cycle_number, roll_itr->max_result, roll_itr->rake_recipient, result, roll_itr->identifier, roll_itr->cycle_time)
   ).send();
   
   //Removing all bet table entries
@@ -416,10 +416,10 @@ void pinkgambling::handleResult(uint64_t roll_id, uint32_t result) {
 
 //Only for external logging
 
-ACTION pinkgambling::logbet(uint64_t roll_id, uint64_t cycle_number, uint64_t bet_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t muliplier, uint64_t client_seed) {
+ACTION pinkgambling::logbet(uint64_t roll_id, uint64_t cycle_number, uint64_t bet_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t multiplier, uint64_t client_seed) {
   require_auth(_self);
 }
 
-ACTION pinkgambling::logresult(uint64_t roll_id, uint64_t cycle_number, uint32_t max_result, name rake_recipient, uint32_t roll_result, uint64_t identifier) {
+ACTION pinkgambling::logresult(uint64_t roll_id, uint64_t cycle_number, uint32_t max_result, name rake_recipient, uint32_t roll_result, uint64_t identifier, uint32_t cycle_time) {
   require_auth(_self);
 }

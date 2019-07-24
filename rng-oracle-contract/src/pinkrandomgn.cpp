@@ -7,8 +7,6 @@ ACTION pinkrandomgn::init() {
 }
 
 
-
-
 /**
  * External contracts can call this function to request a random value
  * The provided signing_value value is hashed with sha256, and the resulting hash is saved.
@@ -33,10 +31,11 @@ ACTION pinkrandomgn::requestrand(uint64_t assoc_id, uint64_t signing_value, name
   });
   
   configStruct config = configTable.get();
-  //uint64_t id = config.current_job_id;
+  uint64_t id = config.current_job_id++;
+  configTable.set(config, _self);
   
   openJobsTable.emplace(caller, [&](auto& j){
-    j.id = 0;
+    j.id = id;
     j.caller = caller;
     j.assoc_id = assoc_id;
     j.signing_value = signing_value;
