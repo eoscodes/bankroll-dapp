@@ -1,3 +1,4 @@
+
 # Bankroll Contract
 
 This contract is the core of our system. It handles accepting rolls from the outside, getting the randomness from an external contract and then paying out the bets accordingly.
@@ -76,10 +77,10 @@ This contract is the core of our system. It handles accepting rolls from the out
 
 | Type     | Name           | Description                                                                                                                                              |
 |----------|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| name     | creator        | The account name of the creator of this roll. Needs to be the account calling this action                                                                |
-| uint64_t | creator_id     | Id set by the creator, that will later be used to reference this roll. Needed because there is no way to let the creator know the roll_id set internally |
-| uint32_t | max_result     | The roll result will be 1 <= roll result <= max_result                                                                                                   |
-| name     | rake_recipient | Account name that will receive the rake from this roll                                                                                                   |
+| name     | **creator**        | The account name of the creator of this roll. Needs to be the account calling this action                                                                |
+| uint64_t | **creator_id**     | Id set by the creator, that will later be used to reference this roll. Needed because there is no way to let the creator know the roll_id set internally |
+| uint32_t | **max_result**     | The roll result will be 1 <= roll result <= max_result                                                                                                   |
+| name     | **rake_recipient** | Account name that will receive the rake from this roll                                                                                                   |
 
 ### Decription:
 
@@ -90,13 +91,13 @@ This is the action to be called initially when creating a new roll. The bets can
 
 | Type     | Name        | Description                                                                              |
 |----------|-------------|------------------------------------------------------------------------------------------|
-| name     | creator     | The account name of the creator of the roll. Needs to be the account calling this action |
-| uint64_t | creator_id  | The creator_id that was set when initially creating this roll                            |
-| asset    | quntity     | The amount of Wax to be bet on this                                                      |
-| uint32_t | lower_bound | See below                                                                                |
-| uint32_t | upper_bound | The bet wins if lower_bound <= roll result <= upper_bound                                |
-| uint32_t | multiplier  | Multiplier of the bet x1000. (multiplier 2000 -> payout = 2 * quantity)                  |
-| uint64_t | random_seed | Seed that will be used in the randomness generation process                              |
+| name     | **creator**     | The account name of the creator of the roll. Needs to be the account calling this action |
+| uint64_t | **creator_id**  | The creator_id that was set when initially creating this roll                            |
+| asset    | **quantity**     | The amount of Wax to be bet on this                                                      |
+| uint32_t | **lower_bound** | See below                                                                                |
+| uint32_t | **upper_bound** | The bet wins if lower_bound <= roll result <= upper_bound                                |
+| uint32_t | **multiplier**  | Multiplier of the bet x1000. (multiplier 2000 -> payout = 2 * quantity)                  |
+| uint64_t | **random_seed** | Seed that will be used in the randomness generation process                              |
 
 ### Description:
 
@@ -107,9 +108,9 @@ Adds a bet to an already created roll. Note that it is not yet paid for immediat
 
 | Type     | Name       | Description                                                                                      |
 |----------|------------|--------------------------------------------------------------------------------------------------|
-| name     | from       | The account name that will receive the payout                                                    |
-| asset    | quantity   | The amount of Wax to payout                                                                      |
-| uint64_t | irrelevant | This parameter is not used within the action. It is required as a workaround for internal calls. |
+| name     | **from**       | The account name that will receive the payout                                                    |
+| asset    | **quantity**   | The amount of Wax to payout                                                                      |
+| uint64_t | **irrelevant** | This parameter is not used within the action. It is required as a workaround for internal calls. |
 
 ### Description:
 
@@ -120,8 +121,8 @@ This is called as a deferred action by the bankroll contract when paying out bet
 
 | Type     | Name               | Description                                                                                                       |
 |----------|--------------------|-------------------------------------------------------------------------------------------------------------------|
-| name     | from               | The account name of the investor to withdraw from                                                                 |
-| uint64_t | weight_to_withdraw | The bankroll_weight to withdraw. The Wax paid out will be `(weight_to_withdraw / total bankroll weight) * bankroll` |
+| name     | **from**               | The account name of the investor to withdraw from                                                                 |
+| uint64_t | **weight_to_withdraw** | The bankroll_weight to withdraw. The Wax paid out will be `(weight_to_withdraw / total bankroll weight) * bankroll` |
 
 ### Decription:
 
