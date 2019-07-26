@@ -148,9 +148,9 @@ ACTION pinkbankroll::payoutbet(name from, asset quantity, uint64_t irrelevant) {
   "transaction doesn't have the required permission");
   
   check(quantity.is_valid(),
-  "amount is invalid");
+  "quantity is invalid");
   check(quantity.symbol == symbol("WAX", 8),
-  "amount must be in WAX");
+  "quantity must be in WAX");
   
   auto payout_itr = payoutsTable.find(from.value);
   check(payout_itr != payoutsTable.end(),
@@ -564,7 +564,7 @@ ACTION pinkbankroll::logannounce(uint64_t roll_id, name creator, uint64_t creato
   require_auth(_self);
 }
 
-ACTION pinkbankroll::logbet(uint64_t roll_id, uint64_t bet_id, name bettor, asset amount, uint32_t lower_bound, uint32_t upper_bound, uint32_t multiplier, uint64_t random_seed) {
+ACTION pinkbankroll::logbet(uint64_t roll_id, uint64_t bet_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t multiplier, uint64_t random_seed) {
   require_auth(_self);
 }
 
