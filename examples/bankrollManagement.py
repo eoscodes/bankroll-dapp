@@ -4,16 +4,16 @@ import random
 
 
 class Bet:
-    def __init__(self, amount, lowerBound, upperBound, multiplier):
+    def __init__(self, amount, lowerBound, upperBound, multiplier, maxResult):
         self.amount = amount
         self.lowerBound = lowerBound
         self.upperBound = upperBound
         self.multiplier = multiplier
         self.payout = amount * multiplier
-        self.odds = (upperBound - lowerBound + 1) / 1000
+        self.odds = (upperBound - lowerBound + 1) / maxResult
         self.EV = self.odds * multiplier
-        if self.EV > 0.990001:  # slightly more so that float inaccuracy dont make this throw
-            raise Exception("EV cant be greater than 0.99")
+        #if self.EV > 0.990001:  # slightly more so that float inaccuracy dont make this throw
+            #raise Exception("EV cant be greater than 0.99")
         self.devPayout = (1 - self.EV - 0.007) * amount     # payouts for both the bankroll devs and the 3rd party devs
 
 
@@ -66,13 +66,13 @@ class ChainedRange:
 
 
 # Calculates the minimum bankroll required to accept the bets in the chained ranges
-def calculateMinBankroll(chainedRangeStart, amountCollected):
+def calculateMinBankroll(chainedRangeStart, amountCollected, maxResult):
     variance = 0
     currentRange = chainedRangeStart
     while currentRange is not None:
         if currentRange.payout > amountCollected:
             # Odds of this range winning
-            odds = (currentRange.upperBound - currentRange.lowerBound + 1) / 1000
+            odds = (currentRange.upperBound - currentRange.lowerBound + 1) / maxResult
             # This factor is the max percentage of the bankroll that could be bet on this result, if it were the only bet
             maxBetFactor = 5 / math.sqrt(1 / odds - 1) - 0.2
             # This is the amount that the bankroll has to play if this range wins, plus the initial bet amount on this range
@@ -124,7 +124,7 @@ def testBankrollManagement(bets, maxResult):
     for bet in bets:
         totalCollected += bet.amount - bet.devPayout
         initialRange.insertBet(bet)
-    minBR = calculateMinBankroll(initialRange, totalCollected)
+    minBR = calculateMinBankroll(initialRange, totalCollected, maxResult)
     print("The minimum required bankroll for this roll is: " + str(minBR))
 
     simResult = simulateMultipleBets(bets, minBR, 100, 10000, 0.5 * minBR)
@@ -134,10 +134,10 @@ def testBankrollManagement(bets, maxResult):
 
 # Example bets. Feel free to change these, remove them or add more
 bets = [
-    Bet(100, 1, 500, 1.95),
-    Bet(50, 300, 800, 1.95),
-    Bet(40, 200, 300, 9),
-    Bet(100, 100, 900, 1.10)
+    Bet(50, 1, 50, 2, 100),
+    Bet(20, 41, 65, 4, 100),
+    Bet(40, 200, 300, 9, 100),
+    Bet(100, 100, 900, 1.10, 100)
 ]
 
-testBankrollManagement(bets, 1000)
+testBankrollManagement(bets, 100)
