@@ -393,6 +393,10 @@ void pinkbankroll::receivetransfer(name from, name to, asset quantity, std::stri
  * @param memo - The memo to send with the transfer
  */
 void pinkbankroll::transferFromBankroll(name recipient, asset quantity, std::string memo) {
+  //The eosio.token contract will throw on zero amount transfers
+  if (quantity.amount == 0) {
+    return;
+  }
   statsStruct stats = statsTable.get();
   stats.bankroll -= quantity;
   statsTable.set(stats, _self);
