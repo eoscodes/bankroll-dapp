@@ -98,6 +98,14 @@ CONTRACT pinkbankroll : public contract {
     typedef multi_index<"stats"_n, statsStruct> stats_t_for_abi;
     
     
+    TABLE rngUsedSeedStruct {
+      uint64_t seed;
+      
+      uint64_t primary_key() const { return seed; }
+    };
+    typedef multi_index<"usedseeds"_n, rngUsedSeedStruct> rng_usedseeds_t;
+    
+    
     rolls_t rollsTable;
     investors_t investorsTable;
     payouts_t payoutsTable;

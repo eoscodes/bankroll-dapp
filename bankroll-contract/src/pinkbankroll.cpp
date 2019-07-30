@@ -521,6 +521,16 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   check(stats.bankroll >= required_bankroll,
   "the current bankroll is too small to accept this roll");
   
+  
+  //Check if the signing_value was already used.
+  //If that is the case, increment the signing_value until a non-used value is found
+  rng_usedseeds_t rngUsedSeeds("pinkrandomgn"_n, "pinkrandomgn"_n.value);
+  while (rngUsedSeeds.find(signing_value) != rngUsedSeeds.end()) {
+    signing_value += 1;
+  }
+  
+  
+  
   rolls_by_creator_and_id.modify(itr_creator_and_id, _self, [&](auto &r) {
     r.paid = true;
   });
