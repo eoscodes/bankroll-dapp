@@ -326,6 +326,13 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
   //Removing roll table entry
   rollsTable.erase(rolls_itr);
   
+  action(
+    permission_level{_self, "active"_n},
+    _self,
+    "logbrchange"_n,
+    std::make_tuple(bankroll_change, std::string("roll result"), stats.bankroll)
+  ).send();
+  
   transferFromBankroll(rolls_itr->rake_recipient, total_rake, std::string("pinkbankroll rake"));
   transferFromBankroll("pinknetworkx"_n, total_dev_fee, std::string("pinkbankroll devfee"));
   
@@ -334,13 +341,6 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
     _self,
     "loggetrand"_n,
     std::make_tuple(assoc_id, result, bankroll_change, random_value)
-  ).send();
-  
-  action(
-    permission_level{_self, "active"_n},
-    _self,
-    "logbrchange"_n,
-    std::make_tuple(bankroll_change, std::string("roll result"), stats.bankroll)
   ).send();
   
   action(
