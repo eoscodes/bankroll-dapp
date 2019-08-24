@@ -440,7 +440,7 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
     
   uint64_t added_bankroll_weight;
   if (stats.bankroll.amount == 0) {
-    added_bankroll_weight = 1000000;
+    added_bankroll_weight = quantity.amount;
   } else {
     added_bankroll_weight = (int) ((double)quantity.amount / (double)stats.bankroll.amount * (double)stats.total_bankroll_weight);
   }
