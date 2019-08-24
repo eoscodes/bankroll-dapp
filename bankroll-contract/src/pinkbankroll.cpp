@@ -1,6 +1,8 @@
 #include <pinkbankroll.hpp>
 #include <bankrollmanagement.hpp>
 
+static constexpr symbol CORE_SYMBOL = symbol("WAX", 8);
+
 //Only needs to be called once after contract creation
 ACTION pinkbankroll::init() {
   require_auth(_self);
@@ -86,7 +88,7 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
   
   check(quantity.is_valid(),
   "quantity is invalid");
-  check(quantity.symbol == symbol("WAX", 8),
+  check(quantity.symbol == CORE_SYMBOL,
   "quantity must be in WAX");
   
   check(lower_bound >= 1,
@@ -101,9 +103,9 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
   
   
   double odds = (double)(upper_bound - lower_bound + 1) / (double)(itr_creator_and_id->max_result);
-  check (odds >= (double)0.005,
+  check (odds >= 0.005,
   "the odds cant be smaller than 0.005");
-  double ev = odds * multiplier / (double)1000;
+  double ev = odds * multiplier / 1000.0;
   check(ev <= 0.99,
   "the bet cant have an EV greater than 0.99 * quantity");
   
@@ -138,18 +140,12 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
  * 
  * @param from - The account name to payout a bet to
  * @param quantity - The amount of WAX to payout
- * @param irrelevant - This is needed when creating the deferred actions calling this action
- *                     The bet_id is passed, but it is not used in this function. Instead, it is required to ensure
- *                     that two different bets always call this function with different parameters
- *                     Otherwise, the function creating the deffered actions might throw, if two bets with equal parameters 
  */
-ACTION pinkbankroll::payoutbet(name from, asset quantity, uint64_t irrelevant) {
-  check(has_auth(from) || has_auth(_self),
-  "transaction doesn't have the required permission");
+ACTION pinkbankroll::payoutbet(name from, asset quantity) {
   
   check(quantity.is_valid(),
   "quantity is invalid");
-  check(quantity.symbol == symbol("WAX", 8),
+  check(quantity.symbol == CORE_SYMBOL,
   "quantity must be in WAX");
   
   auto payout_itr = payoutsTable.find(from.value);
@@ -200,7 +196,7 @@ ACTION pinkbankroll::withdraw(name from, uint64_t weight_to_withdraw) {
   
   statsStruct stats = statsTable.get();
   uint64_t amount_to_withdraw = (uint64_t)((double)stats.bankroll.amount * (double)weight_to_withdraw) / (double)stats.total_bankroll_weight;
-  asset wax_to_withdraw = asset(amount_to_withdraw, symbol("WAX", 8));
+  asset wax_to_withdraw = asset(amount_to_withdraw, CORE_SYMBOL);
   
   if (investor_itr->bankroll_weight == weight_to_withdraw) {
     investorsTable.erase(investor_itr);
@@ -238,12 +234,15 @@ ACTION pinkbankroll::setpaused(bool paused) {
 
 /**
  * This is called by the RNG oracle, providing the randomness for calculating the result
+ * Note: In the case there are a lot (>100) bets that are all being paid out, this action could theoretically take more than 30ms to execute
+ *       If that is the case, the transaction will fail. Depending on the functionality of the oracle, the transaction might be resent.
+ *       It is the responsibility of the 3rd party dev using the pinkbankroll contract to ensure that this doesn't happen by enforcing an appropiate max bet limit
  * 
  * @param assoc_id - The assoc_id that was provided to the oracle when requesting the random value. Equal to the roll_id
  * @param random_value - The sha256 hash of the random seed that was provided when starting the roll. Is used as randomness
  */
 ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
-  require_auth("pinkrandomgn"_n);
+  require_auth("orng.wax"_n);
   
   auto rolls_itr = rollsTable.find(assoc_id);
   check(rolls_itr != rollsTable.end(),
@@ -264,17 +263,17 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
   
   rollBets_t betsTable(_self, assoc_id);
   
-  asset total_rake = asset(0, symbol("WAX", 8));
-  asset total_dev_fee = asset(0, symbol("WAX", 8));
-  asset bankroll_change = asset(0, symbol("WAX", 8)); //Disregarding rake/ fee
+  asset total_rake = asset(0, CORE_SYMBOL);
+  asset total_dev_fee = asset(0, CORE_SYMBOL);
+  asset bankroll_change = asset(0, CORE_SYMBOL); //Disregarding rake/ fee
   
   auto bet_itr = betsTable.begin();
   while(bet_itr != betsTable.end()) {
     //Calculating the rake/ fee to payouts
-    double ev = (double)bet_itr->multiplier / (double)1000 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)rolls_itr->max_result;
-    double edge = (double)1 - ev;
-    total_rake.amount += (int64_t)((double)bet_itr->quantity.amount * (edge - (double)0.01));
-    total_dev_fee.amount += (int64_t)((double)bet_itr->quantity.amount * (double)0.003);
+    double ev = (double)bet_itr->multiplier / 1000.0 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)rolls_itr->max_result;
+    double edge = 1.0 - ev;
+    total_rake.amount += (int64_t)((double)bet_itr->quantity.amount * (edge - 0.01));
+    total_dev_fee.amount += (int64_t)((double)bet_itr->quantity.amount * 0.003);
     
     //Calculating the bet outcome
     bankroll_change += bet_itr->quantity;
@@ -305,10 +304,10 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
         permission_level(_self, "active"_n),
         _self,
         "payoutbet"_n,
-        std::make_tuple(bet_itr->bettor, quantity_won, bet_itr->bet_id)
+        std::make_tuple(bet_itr->bettor, quantity_won)
       );
       
-      uint64_t deferred_id = (assoc_id << 8) + bet_itr->bet_id;
+      uint64_t deferred_id = (assoc_id << 16) + bet_itr->bet_id;
       t.send(deferred_id, _self);
       
     }
@@ -366,7 +365,7 @@ void pinkbankroll::receivetransfer(name from, name to, asset quantity, std::stri
   if (to != _self) {
     return;
   }
-  check(quantity.symbol == symbol("WAX", 8),
+  check(quantity.symbol == CORE_SYMBOL,
   "quantity must be in WAX");
   
   if (memo.compare("deposit") == 0) {
@@ -440,9 +439,9 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
     
   uint64_t added_bankroll_weight;
   if (stats.bankroll.amount == 0) {
-    added_bankroll_weight = 1000000;
+    added_bankroll_weight = quantity.amount;
   } else {
-    added_bankroll_weight = (int) ((double)quantity.amount / (double)stats.bankroll.amount * (double)stats.total_bankroll_weight);
+    added_bankroll_weight = (uint64_t) ((double)quantity.amount / (double)stats.bankroll.amount * (double)stats.total_bankroll_weight);
   }
   
   stats.bankroll += quantity;
@@ -475,6 +474,8 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
 
 /**
  * Private function to handle starting a roll (as parsed from the receiveTransfer action)
+ * Note: This has a worst case runtime of O(bets^2) and could theoretically take more than 30ms if the roll has a lot of different bets
+ *       If this happens, the transaction will fail. This means that the WAX transfer will also fail, so no funds will be lost
  * 
  * @param creator - The acccount name of the creator of the roll, and also the account that sends the transfer
  * @param creator_id - The creator id of the roll to start, as parsed from the transfer memo
@@ -493,25 +494,40 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   check(!itr_creator_and_id->paid,
   "the roll has already been paid for");
   
-  uint64_t signing_value = itr_creator_and_id->roll_id;
-  
-  asset total_quantity_bet = asset(0, symbol("WAX", 8));
-  asset total_bets_collected = asset(0, symbol("WAX", 8));  // = total_quantity_bet - (rake + fees)
+  asset total_quantity_bet = asset(0, CORE_SYMBOL);
+  asset total_bets_collected = asset(0, CORE_SYMBOL);  // = total_quantity_bet - (rake + fees)
   
   uint32_t max_range = itr_creator_and_id->max_result;
   ChainedRange firstRange = ChainedRange(1, max_range, 0);
   rollBets_t betsTable(_self, itr_creator_and_id->roll_id);
   
+  uint64_t signing_value = 0;
+  uint64_t signing_xor = 0;
+  uint64_t bet_number = 0;
+  
   for (auto it = betsTable.begin(); it != betsTable.end(); it++) {
     total_quantity_bet += it->quantity;
-    double ev = (double)it->multiplier / (double)1000 * (double)(it->upper_bound - it->lower_bound + 1) / (double)itr_creator_and_id->max_result;
-    total_bets_collected.amount += (int64_t)((double)it->quantity.amount * (ev + (double)0.007));
+    double ev = (double)it->multiplier / 1000.0 * (double)(it->upper_bound - it->lower_bound + 1) / (double)itr_creator_and_id->max_result;
+    total_bets_collected.amount += (int64_t)((double)it->quantity.amount * (ev + 0.007));
     
     uint64_t payout = it->quantity.amount * it->multiplier / 1000;
     firstRange.insertBet(it->lower_bound, it->upper_bound, payout);
     
-    signing_value = signing_value ^ it->random_seed;
+    //For up to the first 32 bits, the n'th bit of the signing_value will be the first bit of the n'th bet's random seed
+    //This prevents an attacker being able to change the signing_value to anything he wants by sending the last bet, by having some bits that are not possible to change
+    if (bet_number < 32) {
+      signing_value += (it->random_seed & 0x8000000000000000) >> bet_number;
+      bet_number++;
+    };
+    
+    signing_xor = signing_xor ^ it->random_seed;
   }
+  
+  //The remaining bits will be the xor of all random seeds
+  signing_value += (signing_xor >> bet_number);
+  //To further prevent collisions, the previous signing value is shifted 16 bits to the right
+  //And the first 16 bits of the signing_value are the last 16 bits of the roll id
+  signing_value = (itr_creator_and_id->roll_id << 48) + (signing_value >> 16);
   
   check(quantity == total_quantity_bet,
   "quantity needs to be equal to the total quantity bet of the roll");
@@ -524,8 +540,7 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   
   //Check if the signing_value was already used.
   //If that is the case, increment the signing_value until a non-used value is found
-  rng_usedseeds_t rngUsedSeeds("pinkrandomgn"_n, "pinkrandomgn"_n.value);
-  while (rngUsedSeeds.find(signing_value) != rngUsedSeeds.end()) {
+  while (signvals_table.find(signing_value) != signvals_table.end()) {
     signing_value += 1;
   }
   
@@ -535,10 +550,9 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
     r.paid = true;
   });
   
-  print(signing_value);
   action(
     permission_level{_self, "active"_n},
-    "pinkrandomgn"_n,
+    "orng.wax"_n,
     "requestrand"_n,
     std::make_tuple(itr_creator_and_id->roll_id, signing_value, _self)
   ).send();

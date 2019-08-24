@@ -82,7 +82,7 @@ asset getRequiredBankroll(ChainedRange firstRange, uint64_t totalBetAmount, uint
       //dds of this range winning
       double odds = (double)(currentRangePtr->upperBound - currentRangePtr->lowerBound + 1) / (double)maxRangeLimit;
       //This factor is the max percentage of the bankroll that could be bet on this result, if it were the only bet
-      double maxBetFactor = (double)5 / sqrt(((double)1 / odds) - (double)1) - 0.2;
+      double maxBetFactor = 5.0 / sqrt((1.0 / odds) - 1.0) - 0.2;
       //This is the amount that the bankroll has to play if this range wins, plus the initial bet amount on this range
       double effectivePayout = ((double) (currentRangePtr->payout - totalBetAmount) + (double)currentRangePtr->payout * odds);
       //The odds of going losing 50% of the bankroll in 100 bets approximately grows proportional to the cube of the relative size of the bet
@@ -92,6 +92,6 @@ asset getRequiredBankroll(ChainedRange firstRange, uint64_t totalBetAmount, uint
   }
   variance = cbrt(variance);
   
-  uint64_t requiredBankrollAmount = (uint64_t)(variance * (double)100);
+  uint64_t requiredBankrollAmount = (uint64_t)(variance * 100.0);
   return asset(requiredBankrollAmount, symbol("WAX", 8));
 }

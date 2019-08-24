@@ -1,6 +1,8 @@
 #include <pinkgambling.hpp>
 #include <bankrollmanagement.hpp>
 
+static constexpr symbol CORE_SYMBOL = symbol("WAX", 8);
+
 //Only needs to be called once after contract creation
 ACTION pinkgambling::init() {
   require_auth(_self);
@@ -70,7 +72,7 @@ void pinkgambling::receivetransfer(name from, name to, asset quantity, std::stri
   if (to != _self) {
     return;
   }
-  check(quantity.symbol == symbol("WAX", 8),
+  check(quantity.symbol == CORE_SYMBOL,
   "quantity must be in WAX");
   
   if (memo.find("#createcycle ") == 0) {
@@ -195,7 +197,7 @@ void pinkgambling::createCycle(uint32_t max_result, name rake_recipient, uint32_
     permission_level{_self, "active"_n},
     "eosio.token"_n,
     "transfer"_n,
-    std::make_tuple(_self, "pinknetworkx"_n, asset(1000000000, symbol("WAX", 8)), std::string("payment for new cycle"))
+    std::make_tuple(_self, "pinknetworkx"_n, asset(1000000000, CORE_SYMBOL), std::string("payment for new cycle"))
   ).send();
 }
 
@@ -272,9 +274,9 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
   "the multiplier has to be greater than 1000 (greater than 1x)");
   
   double odds = (double)(upper_bound - lower_bound + 1) / (double)roll_itr->max_result;
-  check (odds >= (double)0.005,
+  check (odds >= 0.005,
   "the odds cant be smaller than 0.005");
-  double ev = odds * multiplier / (double)1000;
+  double ev = odds * multiplier / 1000.0;
   check(ev <= 0.99,
   "the bet cant have an EV greater than 0.99 * quantity");
   
@@ -291,11 +293,11 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
   });
   
   ChainedRange firstRange = ChainedRange(1, roll_itr->max_result, 0);
-  asset total_bets_collected = asset(0, symbol("WAX", 8));  // = total_quantity_bet - (rake + fees)
+  asset total_bets_collected = asset(0, CORE_SYMBOL);  // = total_quantity_bet - (rake + fees)
   
   for (auto bet_itr = betsTable.begin(); bet_itr != betsTable.end(); bet_itr++) {
-    double ev = (double)bet_itr->multiplier / (double)1000 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)roll_itr->max_result;
-    total_bets_collected.amount += (int64_t)((double)bet_itr->quantity.amount * (ev + (double)0.007));
+    double ev = (double)bet_itr->multiplier / 1000.0 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)roll_itr->max_result;
+    total_bets_collected.amount += (int64_t)((double)bet_itr->quantity.amount * (ev + 0.007));
     
     uint64_t payout = bet_itr->quantity.amount * bet_itr->multiplier / 1000;
     firstRange.insertBet(bet_itr->lower_bound, bet_itr->upper_bound, payout);
@@ -345,7 +347,7 @@ void pinkgambling::sendRoll(uint64_t roll_id) {
     std::make_tuple(_self, roll_id, roll_itr->max_result, roll_itr->rake_recipient)
   ).send();
   
-  asset total_bet = asset(0, symbol("WAX", 8));
+  asset total_bet = asset(0, CORE_SYMBOL);
   rollBets_t betsTable(_self, roll_id);
   for (auto bet_itr = betsTable.begin(); bet_itr != betsTable.end(); bet_itr++) {
     total_bet += bet_itr->quantity;

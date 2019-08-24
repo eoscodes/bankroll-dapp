@@ -13,13 +13,14 @@ CONTRACT pinkbankroll : public contract {
     rollsTable(receiver, receiver.value),
     investorsTable(receiver, receiver.value),
     payoutsTable(receiver, receiver.value),
-    statsTable(receiver, receiver.value)
+    statsTable(receiver, receiver.value),
+    signvals_table("orng.wax"_n, "orng.wax"_n.value)
     {}
     
     ACTION init();
     ACTION announceroll(name creator, uint64_t creator_id, uint32_t max_result, name rake_recipient);
     ACTION announcebet(name creator, uint64_t creator_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t multiplier, uint64_t random_seed);
-    ACTION payoutbet(name from, asset quantity, uint64_t irrelevant);
+    ACTION payoutbet(name from, asset quantity);
     ACTION withdraw(name from, uint64_t weight_to_withdraw);
     ACTION setpaused(bool paused);
     
@@ -98,18 +99,19 @@ CONTRACT pinkbankroll : public contract {
     typedef multi_index<"stats"_n, statsStruct> stats_t_for_abi;
     
     
-    TABLE rngUsedSeedStruct {
-      uint64_t seed;
-      
-      uint64_t primary_key() const { return seed; }
+    TABLE signvals_a {
+        uint64_t signing_value;
+
+        auto primary_key() const { return signing_value; }
     };
-    typedef multi_index<"usedseeds"_n, rngUsedSeedStruct> rng_usedseeds_t;
+    using signvals_table_type = multi_index<"signvals.a"_n, signvals_a>;
     
     
     rolls_t rollsTable;
     investors_t investorsTable;
     payouts_t payoutsTable;
     stats_t statsTable;
+    signvals_table_type signvals_table;
   
     void transferFromBankroll(name recipient, asset quantity, std::string memo);
     void handleDeposit(name investor, asset quantity);
