@@ -272,9 +272,9 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
   "the multiplier has to be greater than 1000 (greater than 1x)");
   
   double odds = (double)(upper_bound - lower_bound + 1) / (double)roll_itr->max_result;
-  check (odds >= (double)0.005,
+  check (odds >= 0.005,
   "the odds cant be smaller than 0.005");
-  double ev = odds * multiplier / (double)1000;
+  double ev = odds * multiplier / 1000.0;
   check(ev <= 0.99,
   "the bet cant have an EV greater than 0.99 * quantity");
   
@@ -294,8 +294,8 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
   asset total_bets_collected = asset(0, symbol("WAX", 8));  // = total_quantity_bet - (rake + fees)
   
   for (auto bet_itr = betsTable.begin(); bet_itr != betsTable.end(); bet_itr++) {
-    double ev = (double)bet_itr->multiplier / (double)1000 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)roll_itr->max_result;
-    total_bets_collected.amount += (int64_t)((double)bet_itr->quantity.amount * (ev + (double)0.007));
+    double ev = (double)bet_itr->multiplier / 1000.0 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)roll_itr->max_result;
+    total_bets_collected.amount += (int64_t)((double)bet_itr->quantity.amount * (ev + 0.007));
     
     uint64_t payout = bet_itr->quantity.amount * bet_itr->multiplier / 1000;
     firstRange.insertBet(bet_itr->lower_bound, bet_itr->upper_bound, payout);

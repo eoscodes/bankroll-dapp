@@ -101,9 +101,9 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
   
   
   double odds = (double)(upper_bound - lower_bound + 1) / (double)(itr_creator_and_id->max_result);
-  check (odds >= (double)0.005,
+  check (odds >= 0.005,
   "the odds cant be smaller than 0.005");
-  double ev = odds * multiplier / (double)1000;
+  double ev = odds * multiplier / 1000.0;
   check(ev <= 0.99,
   "the bet cant have an EV greater than 0.99 * quantity");
   
@@ -271,10 +271,10 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
   auto bet_itr = betsTable.begin();
   while(bet_itr != betsTable.end()) {
     //Calculating the rake/ fee to payouts
-    double ev = (double)bet_itr->multiplier / (double)1000 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)rolls_itr->max_result;
-    double edge = (double)1 - ev;
-    total_rake.amount += (int64_t)((double)bet_itr->quantity.amount * (edge - (double)0.01));
-    total_dev_fee.amount += (int64_t)((double)bet_itr->quantity.amount * (double)0.003);
+    double ev = (double)bet_itr->multiplier / 1000.0 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)rolls_itr->max_result;
+    double edge = 1.0 - ev;
+    total_rake.amount += (int64_t)((double)bet_itr->quantity.amount * (edge - 0.01));
+    total_dev_fee.amount += (int64_t)((double)bet_itr->quantity.amount * 0.003);
     
     //Calculating the bet outcome
     bankroll_change += bet_itr->quantity;
@@ -504,8 +504,8 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   
   for (auto it = betsTable.begin(); it != betsTable.end(); it++) {
     total_quantity_bet += it->quantity;
-    double ev = (double)it->multiplier / (double)1000 * (double)(it->upper_bound - it->lower_bound + 1) / (double)itr_creator_and_id->max_result;
-    total_bets_collected.amount += (int64_t)((double)it->quantity.amount * (ev + (double)0.007));
+    double ev = (double)it->multiplier / 1000.0 * (double)(it->upper_bound - it->lower_bound + 1) / (double)itr_creator_and_id->max_result;
+    total_bets_collected.amount += (int64_t)((double)it->quantity.amount * (ev + 0.007));
     
     uint64_t payout = it->quantity.amount * it->multiplier / 1000;
     firstRange.insertBet(it->lower_bound, it->upper_bound, payout);
