@@ -1,6 +1,8 @@
 #include <pinkbankroll.hpp>
 #include <bankrollmanagement.hpp>
 
+static constexpr symbol CORE_SYMBOL = symbol("WAX", 8);
+
 //Only needs to be called once after contract creation
 ACTION pinkbankroll::init() {
   require_auth(_self);
@@ -86,7 +88,7 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
   
   check(quantity.is_valid(),
   "quantity is invalid");
-  check(quantity.symbol == symbol("WAX", 8),
+  check(quantity.symbol == CORE_SYMBOL,
   "quantity must be in WAX");
   
   check(lower_bound >= 1,
@@ -147,7 +149,7 @@ ACTION pinkbankroll::payoutbet(name from, asset quantity, uint64_t irrelevant) {
   
   check(quantity.is_valid(),
   "quantity is invalid");
-  check(quantity.symbol == symbol("WAX", 8),
+  check(quantity.symbol == CORE_SYMBOL,
   "quantity must be in WAX");
   
   auto payout_itr = payoutsTable.find(from.value);
@@ -198,7 +200,7 @@ ACTION pinkbankroll::withdraw(name from, uint64_t weight_to_withdraw) {
   
   statsStruct stats = statsTable.get();
   uint64_t amount_to_withdraw = (uint64_t)((double)stats.bankroll.amount * (double)weight_to_withdraw) / (double)stats.total_bankroll_weight;
-  asset wax_to_withdraw = asset(amount_to_withdraw, symbol("WAX", 8));
+  asset wax_to_withdraw = asset(amount_to_withdraw, CORE_SYMBOL);
   
   if (investor_itr->bankroll_weight == weight_to_withdraw) {
     investorsTable.erase(investor_itr);
@@ -265,9 +267,9 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
   
   rollBets_t betsTable(_self, assoc_id);
   
-  asset total_rake = asset(0, symbol("WAX", 8));
-  asset total_dev_fee = asset(0, symbol("WAX", 8));
-  asset bankroll_change = asset(0, symbol("WAX", 8)); //Disregarding rake/ fee
+  asset total_rake = asset(0, CORE_SYMBOL);
+  asset total_dev_fee = asset(0, CORE_SYMBOL);
+  asset bankroll_change = asset(0, CORE_SYMBOL); //Disregarding rake/ fee
   
   auto bet_itr = betsTable.begin();
   while(bet_itr != betsTable.end()) {
@@ -367,7 +369,7 @@ void pinkbankroll::receivetransfer(name from, name to, asset quantity, std::stri
   if (to != _self) {
     return;
   }
-  check(quantity.symbol == symbol("WAX", 8),
+  check(quantity.symbol == CORE_SYMBOL,
   "quantity must be in WAX");
   
   if (memo.compare("deposit") == 0) {
@@ -496,8 +498,8 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   check(!itr_creator_and_id->paid,
   "the roll has already been paid for");
   
-  asset total_quantity_bet = asset(0, symbol("WAX", 8));
-  asset total_bets_collected = asset(0, symbol("WAX", 8));  // = total_quantity_bet - (rake + fees)
+  asset total_quantity_bet = asset(0, CORE_SYMBOL);
+  asset total_bets_collected = asset(0, CORE_SYMBOL);  // = total_quantity_bet - (rake + fees)
   
   uint32_t max_range = itr_creator_and_id->max_result;
   ChainedRange firstRange = ChainedRange(1, max_range, 0);
