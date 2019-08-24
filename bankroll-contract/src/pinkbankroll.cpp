@@ -144,8 +144,6 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
  *                     Otherwise, the function creating the deffered actions might throw, if two bets with equal parameters 
  */
 ACTION pinkbankroll::payoutbet(name from, asset quantity, uint64_t irrelevant) {
-  check(has_auth(from) || has_auth(_self),
-  "transaction doesn't have the required permission");
   
   check(quantity.is_valid(),
   "quantity is invalid");
