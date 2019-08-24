@@ -242,7 +242,7 @@ ACTION pinkbankroll::setpaused(bool paused) {
  * @param random_value - The sha256 hash of the random seed that was provided when starting the roll. Is used as randomness
  */
 ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
-  require_auth("pinkrandomgn"_n);
+  require_auth("orng.wax"_n);
   
   auto rolls_itr = rollsTable.find(assoc_id);
   check(rolls_itr != rollsTable.end(),
@@ -540,8 +540,7 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   
   //Check if the signing_value was already used.
   //If that is the case, increment the signing_value until a non-used value is found
-  rng_usedseeds_t rngUsedSeeds("pinkrandomgn"_n, "pinkrandomgn"_n.value);
-  while (rngUsedSeeds.find(signing_value) != rngUsedSeeds.end()) {
+  while (signvals_table.find(signing_value) != signvals_table.end()) {
     signing_value += 1;
   }
   
@@ -553,7 +552,7 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   
   action(
     permission_level{_self, "active"_n},
-    "pinkrandomgn"_n,
+    "orng.wax"_n,
     "requestrand"_n,
     std::make_tuple(itr_creator_and_id->roll_id, signing_value, _self)
   ).send();
