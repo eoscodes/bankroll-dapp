@@ -236,6 +236,9 @@ ACTION pinkbankroll::setpaused(bool paused) {
 
 /**
  * This is called by the RNG oracle, providing the randomness for calculating the result
+ * Note: In the case there are a lot (>100) bets that are all being paid out, this action could theoretically take more than 30ms to execute
+ *       If that is the case, the transaction will fail. Depending on the functionality of the oracle, the transaction might be resent.
+ *       It is the responsibility of the 3rd party dev using the pinkbankroll contract to ensure that this doesn't happen by enforcing an appropiate max bet limit
  * 
  * @param assoc_id - The assoc_id that was provided to the oracle when requesting the random value. Equal to the roll_id
  * @param random_value - The sha256 hash of the random seed that was provided when starting the roll. Is used as randomness
@@ -473,6 +476,8 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
 
 /**
  * Private function to handle starting a roll (as parsed from the receiveTransfer action)
+ * Note: This has a worst case runtime of O(bets^2) and could theoretically take more than 30ms if the roll has a lot of different bets
+ *       If this happens, the transaction will fail. This means that the WAX transfer will also fail, so no funds will be lost
  * 
  * @param creator - The acccount name of the creator of the roll, and also the account that sends the transfer
  * @param creator_id - The creator id of the roll to start, as parsed from the transfer memo
