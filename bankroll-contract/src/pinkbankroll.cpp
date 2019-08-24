@@ -309,7 +309,7 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
         std::make_tuple(bet_itr->bettor, quantity_won, bet_itr->bet_id)
       );
       
-      uint64_t deferred_id = (assoc_id << 8) + bet_itr->bet_id;
+      uint64_t deferred_id = (assoc_id << 16) + bet_itr->bet_id;
       t.send(deferred_id, _self);
       
     }
@@ -496,14 +496,16 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   check(!itr_creator_and_id->paid,
   "the roll has already been paid for");
   
-  uint64_t signing_value = itr_creator_and_id->roll_id;
-  
   asset total_quantity_bet = asset(0, symbol("WAX", 8));
   asset total_bets_collected = asset(0, symbol("WAX", 8));  // = total_quantity_bet - (rake + fees)
   
   uint32_t max_range = itr_creator_and_id->max_result;
   ChainedRange firstRange = ChainedRange(1, max_range, 0);
   rollBets_t betsTable(_self, itr_creator_and_id->roll_id);
+  
+  uint64_t signing_value = 0;
+  uint64_t signing_xor = 0;
+  uint64_t bet_number = 0;
   
   for (auto it = betsTable.begin(); it != betsTable.end(); it++) {
     total_quantity_bet += it->quantity;
@@ -513,8 +515,21 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
     uint64_t payout = it->quantity.amount * it->multiplier / 1000;
     firstRange.insertBet(it->lower_bound, it->upper_bound, payout);
     
-    signing_value = signing_value ^ it->random_seed;
+    //For up to the first 32 bits, the n'th bit of the signing_value will be the first bit of the n'th bet's random seed
+    //This prevents an attacker being able to change the signing_value to anything he wants by sending the last bet, by having some bits that are not possible to change
+    if (bet_number < 32) {
+      signing_value += (it->random_seed & 0x8000000000000000) >> bet_number;
+      bet_number++;
+    };
+    
+    signing_xor = signing_xor ^ it->random_seed;
   }
+  
+  //The remaining bits will be the xor of all random seeds
+  signing_value += (signing_xor >> bet_number);
+  //To further prevent collisions, the previous signing value is shifted 16 bits to the right
+  //And the first 16 bits of the signing_value are the last 16 bits of the roll id
+  signing_value = (itr_creator_and_id->roll_id << 48) + (signing_value >> 16);
   
   check(quantity == total_quantity_bet,
   "quantity needs to be equal to the total quantity bet of the roll");
@@ -538,7 +553,6 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
     r.paid = true;
   });
   
-  print(signing_value);
   action(
     permission_level{_self, "active"_n},
     "pinkrandomgn"_n,
