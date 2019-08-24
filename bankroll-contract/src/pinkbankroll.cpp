@@ -140,12 +140,8 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
  * 
  * @param from - The account name to payout a bet to
  * @param quantity - The amount of WAX to payout
- * @param irrelevant - This is needed when creating the deferred actions calling this action
- *                     The bet_id is passed, but it is not used in this function. Instead, it is required to ensure
- *                     that two different bets always call this function with different parameters
- *                     Otherwise, the function creating the deffered actions might throw, if two bets with equal parameters 
  */
-ACTION pinkbankroll::payoutbet(name from, asset quantity, uint64_t irrelevant) {
+ACTION pinkbankroll::payoutbet(name from, asset quantity) {
   
   check(quantity.is_valid(),
   "quantity is invalid");
@@ -308,7 +304,7 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
         permission_level(_self, "active"_n),
         _self,
         "payoutbet"_n,
-        std::make_tuple(bet_itr->bettor, quantity_won, bet_itr->bet_id)
+        std::make_tuple(bet_itr->bettor, quantity_won)
       );
       
       uint64_t deferred_id = (assoc_id << 16) + bet_itr->bet_id;

@@ -19,7 +19,7 @@ CONTRACT pinkbankroll : public contract {
     ACTION init();
     ACTION announceroll(name creator, uint64_t creator_id, uint32_t max_result, name rake_recipient);
     ACTION announcebet(name creator, uint64_t creator_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t multiplier, uint64_t random_seed);
-    ACTION payoutbet(name from, asset quantity, uint64_t irrelevant);
+    ACTION payoutbet(name from, asset quantity);
     ACTION withdraw(name from, uint64_t weight_to_withdraw);
     ACTION setpaused(bool paused);
     
