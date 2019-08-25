@@ -329,7 +329,7 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
     permission_level{_self, "active"_n},
     _self,
     "logbrchange"_n,
-    std::make_tuple(bankroll_change, std::string("roll result"), stats.bankroll)
+    std::make_tuple(bankroll_change, std::string("roll result"), stats.bankroll, stats.total_bankroll_weight)
   ).send();
   
   transferFromBankroll(rolls_itr->rake_recipient, total_rake, std::string("pinkbankroll rake"));
@@ -339,7 +339,7 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
     permission_level{_self, "active"_n},
     _self,
     "loggetrand"_n,
-    std::make_tuple(assoc_id, result, bankroll_change, random_value)
+    std::make_tuple(assoc_id, result, bankroll_change - total_rake - total_dev_fee, random_value)
   ).send();
   
   action(
@@ -404,7 +404,7 @@ void pinkbankroll::transferFromBankroll(name recipient, asset quantity, std::str
     permission_level{_self, "active"_n},
     _self,
     "logbrchange"_n,
-    std::make_tuple(-quantity, memo, stats.bankroll)
+    std::make_tuple(-quantity, memo, stats.bankroll, stats.total_bankroll_weight)
   ).send();
   
   action(
@@ -465,7 +465,7 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
     permission_level{_self, "active"_n},
     _self,
     "logbrchange"_n,
-    std::make_tuple(quantity, std::string("bankroll deposit"), stats.bankroll)
+    std::make_tuple(quantity, std::string("bankroll deposit"), stats.bankroll, stats.total_bankroll_weight)
   ).send();
 }
 
@@ -604,6 +604,6 @@ ACTION pinkbankroll::loggetrand(uint64_t roll_id, uint32_t result, asset bankrol
   require_auth(_self);
 }
 
-ACTION pinkbankroll::logbrchange(asset change, std::string message, asset new_bankroll) {
+ACTION pinkbankroll::logbrchange(asset change, std::string message, asset new_bankroll, uint64_t total_bankroll_weight) {
   require_auth(_self);
 }

@@ -282,6 +282,14 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
   
   rollBets_t betsTable(_self, roll_id);
   uint64_t bet_id = betsTable.available_primary_key();
+  if (bet_id >= 10) {
+    check(quantity.amount >= 100000000,
+    "The 10th bet and higher need to be at least 1 WAX as a spam protection");
+  };
+  if (bet_id >= 100) {
+    check(quantity.amount >= 1000000000,
+    "The 100th bet and higher need to be at least 10 WAX as a spam protection");
+  }
   betsTable.emplace(_self, [&](betStruct &b) {
     b.bet_id = bet_id;
     b.bettor = bettor;

@@ -34,7 +34,7 @@ CONTRACT pinkbankroll : public contract {
     ACTION logstartroll(uint64_t roll_id, name creator, uint64_t creator_id);
     ACTION loggetrand(uint64_t roll_id, uint32_t result, asset bankroll_change, checksum256 random_value);
     //Bankroll increase/ decrease
-    ACTION logbrchange(asset change, std::string message, asset new_bankroll);
+    ACTION logbrchange(asset change, std::string message, asset new_bankroll, uint64_t total_bankroll_weight);
   
   private:
     
