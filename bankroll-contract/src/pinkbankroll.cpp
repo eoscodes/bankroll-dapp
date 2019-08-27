@@ -356,6 +356,11 @@ void pinkbankroll::receivewaxtransfer(name from, name to, asset quantity, std::s
  * When PINK is sent to the pinkbankroll account, this is interpreted as a withdrawal
  * The PINK tokens get burned and the sender will get the corresponding part of the current bankroll in WAX
  * 
+ * Note: It is checked if there are any active rolls (already paid and waiting for oracle callback) that would not have been accepted if this
+ *       withdrawal had gone through before the roll. This is to prevent attackers from first depositing to increase the max bet, then betting this max bet,
+ *       and then withdrawing before the bet goes though.
+ *       In practice, this should only happen very rarely.
+ * 
  * @param from - The account name that sent the transfer
  * @param to - The account name that receives the transfer
  * @param quantity - The quantity of tokens sent. This could theoretically be something else than PINK, therefore has to be checked
@@ -372,6 +377,34 @@ void pinkbankroll::receivepinktransfer(name from, name to, asset quantity, std::
   statsStruct stats = statsTable.get();
   uint64_t amount_to_withdraw = (uint64_t)((double)stats.bankroll.amount * (double)quantity.amount / (double)get_supply("pinknettoken"_n, PINK_SYMBOL.code()).amount);
   asset wax_to_withdraw = asset(amount_to_withdraw, CORE_SYMBOL);
+  
+  auto rolls_by_paid = rollsTable.get_index<"haspaid"_n>();
+  
+  
+  // This goes through all rolls that are already paid and waiting for the oracle callback
+  // If any of those rolls need the WAX that would be withdrawn to stay within the bankroll management, this withdrawal will fail
+  // This means that the PINK transfer will fail as well, so no funds would be lost
+  for (auto roll_itr = rolls_by_paid.find(1); roll_itr != rolls_by_paid.end(); roll_itr++) {
+    
+    asset total_bets_collected = asset(0, CORE_SYMBOL);  // = total_quantity_bet - (rake + fees)
+    
+    uint32_t max_range = roll_itr->max_result;
+    ChainedRange firstRange = ChainedRange(1, max_range, 0);
+    rollBets_t betsTable(_self, roll_itr->roll_id);
+    
+    for (auto bet_itr = betsTable.begin(); bet_itr != betsTable.end(); bet_itr++) {
+      double ev = (double)bet_itr->multiplier / 1000.0 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)max_range;
+      total_bets_collected.amount += (int64_t)((double)bet_itr->quantity.amount * (ev + 0.007));
+      
+      uint64_t payout = bet_itr->quantity.amount * bet_itr->multiplier / 1000;
+      firstRange.insertBet(bet_itr->lower_bound, bet_itr->upper_bound, payout);
+    }
+    
+    asset required_bankroll = getRequiredBankroll(firstRange, total_bets_collected.amount, max_range);
+    check(required_bankroll < stats.bankroll - wax_to_withdraw,
+    "Can't withdraw because there currently is an active roll that is too big to run without this amount. Try again a second from now.");
+  }
+  
   
   action(
     permission_level{_self, "active"_n},
@@ -441,6 +474,8 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
   } else {
     added_pink_amount = (uint64_t) ((double)quantity.amount / (double)stats.bankroll.amount * (double)get_supply("pinknettoken"_n, PINK_SYMBOL.code()).amount);
   }
+  check(added_pink_amount > 0,
+  "The deposit is so small that it would equate to 0 PINK");
   asset added_pink_quantity = asset(added_pink_amount, PINK_SYMBOL);
   
   stats.bankroll += quantity;
@@ -506,7 +541,7 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   
   for (auto it = betsTable.begin(); it != betsTable.end(); it++) {
     total_quantity_bet += it->quantity;
-    double ev = (double)it->multiplier / 1000.0 * (double)(it->upper_bound - it->lower_bound + 1) / (double)itr_creator_and_id->max_result;
+    double ev = (double)it->multiplier / 1000.0 * (double)(it->upper_bound - it->lower_bound + 1) / (double)max_range;
     total_bets_collected.amount += (int64_t)((double)it->quantity.amount * (ev + 0.007));
     
     uint64_t payout = it->quantity.amount * it->multiplier / 1000;

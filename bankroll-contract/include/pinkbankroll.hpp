@@ -47,11 +47,13 @@ CONTRACT pinkbankroll : public contract {
       
       uint64_t primary_key() const { return roll_id; }
       uint128_t get_creator_and_id() const { return uint128_t{creator.value} << 64 | creator_id; }
+      uint64_t get_paid() const { return paid ? 1 : 0; }
     };
     typedef multi_index<
     "rolls"_n,
     rollStruct,
-    indexed_by<"creatorandid"_n, const_mem_fun<rollStruct, uint128_t, &rollStruct::get_creator_and_id>>>
+    indexed_by<"creatorandid"_n, const_mem_fun<rollStruct, uint128_t, &rollStruct::get_creator_and_id>>,
+    indexed_by<"haspaid"_n, const_mem_fun<rollStruct, uint64_t, &rollStruct::get_paid>>>
     rolls_t;
 
     
