@@ -2,6 +2,7 @@
 #include <bankrollmanagement.hpp>
 
 static constexpr symbol CORE_SYMBOL = symbol("WAX", 8);
+static constexpr symbol PINK_SYMBOL = symbol("PINK", 4);
 
 //Only needs to be called once after contract creation
 ACTION pinkbankroll::init() {
@@ -177,44 +178,6 @@ ACTION pinkbankroll::payoutbet(name from, asset quantity) {
 
 
 
-
-/**
- * Withdraws a part of the bankroll to somebody that has previously invested in the bankroll
- * 
- * @param from - The account name of the investor to withdraw to
- * @param weight_to_withdraw - The bankroll weight to withdraw. See deposit function for more information on bankroll weight
- */
-ACTION pinkbankroll::withdraw(name from, uint64_t weight_to_withdraw) {
-  require_auth(from);
-  
-  auto investor_itr = investorsTable.find(from.value);
-  check(investor_itr != investorsTable.end(),
-  "the account doesn't have anything invested");
-  
-  check(weight_to_withdraw <= investor_itr->bankroll_weight,
-  "the account doesn't have that much bankroll_weight");
-  
-  statsStruct stats = statsTable.get();
-  uint64_t amount_to_withdraw = (uint64_t)((double)stats.bankroll.amount * (double)weight_to_withdraw) / (double)stats.total_bankroll_weight;
-  asset wax_to_withdraw = asset(amount_to_withdraw, CORE_SYMBOL);
-  
-  if (investor_itr->bankroll_weight == weight_to_withdraw) {
-    investorsTable.erase(investor_itr);
-  } else {
-    investorsTable.modify(investor_itr, _self, [&](auto& i) {
-      i.bankroll_weight -= weight_to_withdraw;
-    });
-  }
-  
-  stats.total_bankroll_weight -= weight_to_withdraw;
-  statsTable.set(stats, _self);
-  
-  transferFromBankroll(from, wax_to_withdraw, std::string("bankroll withdraw"));
-}
-
-
-
-
 /**
  * @dev Can be called by the dev account to pause/ unpause the contract.
  * This should hopefully never have to be used, but acts as an emergency stop if it is ever needed
@@ -329,7 +292,7 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
     permission_level{_self, "active"_n},
     _self,
     "logbrchange"_n,
-    std::make_tuple(bankroll_change, std::string("roll result"), stats.bankroll, stats.total_bankroll_weight)
+    std::make_tuple(bankroll_change, std::string("roll result"), stats.bankroll)
   ).send();
   
   transferFromBankroll(rolls_itr->rake_recipient, total_rake, std::string("pinkbankroll rake"));
@@ -339,7 +302,7 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
     permission_level{_self, "active"_n},
     _self,
     "loggetrand"_n,
-    std::make_tuple(assoc_id, result, bankroll_change - total_rake - total_dev_fee, random_value)
+    std::make_tuple(assoc_id, result, bankroll_change - total_rake - total_dev_fee, stats.bankroll, random_value)
   ).send();
   
   action(
@@ -349,6 +312,8 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
     std::make_tuple(roll_creator, roll_creator_id, result)
   ).send();
 }
+
+
 
 
 /**
@@ -361,7 +326,7 @@ ACTION pinkbankroll::receiverand(uint64_t assoc_id, checksum256 random_value) {
  * @param memo - A string of up to 256 characers, used to identify what this transaction is meant for
  */
 
-void pinkbankroll::receivetransfer(name from, name to, asset quantity, std::string memo) {
+void pinkbankroll::receivewaxtransfer(name from, name to, asset quantity, std::string memo) {
   if (to != _self) {
     return;
   }
@@ -385,6 +350,75 @@ void pinkbankroll::receivetransfer(name from, name to, asset quantity, std::stri
 
 
 
+
+/**
+ * This is called whenever there is a pinknettoken transfer involving pinkbankroll as either sender or recipient
+ * When PINK is sent to the pinkbankroll account, this is interpreted as a withdrawal
+ * The PINK tokens get burned and the sender will get the corresponding part of the current bankroll in WAX
+ * 
+ * Note: It is checked if there are any active rolls (already paid and waiting for oracle callback) that would not have been accepted if this
+ *       withdrawal had gone through before the roll. This is to prevent attackers from first depositing to increase the max bet, then betting this max bet,
+ *       and then withdrawing before the bet goes though.
+ *       In practice, this should only happen very rarely.
+ * 
+ * @param from - The account name that sent the transfer
+ * @param to - The account name that receives the transfer
+ * @param quantity - The quantity of tokens sent. This could theoretically be something else than PINK, therefore has to be checked
+ * @param memo - A string of up to 256 characers, used to identify what this transaction is meant for
+ */
+
+void pinkbankroll::receivepinktransfer(name from, name to, asset quantity, std::string memo) {
+  if (to != _self) {
+    return;
+  }
+  check(quantity.symbol == PINK_SYMBOL,
+  "quantity must be in PINK");
+  
+  statsStruct stats = statsTable.get();
+  uint64_t amount_to_withdraw = (uint64_t)((double)stats.bankroll.amount * (double)quantity.amount / (double)get_supply("pinknettoken"_n, PINK_SYMBOL.code()).amount);
+  asset wax_to_withdraw = asset(amount_to_withdraw, CORE_SYMBOL);
+  
+  auto rolls_by_paid = rollsTable.get_index<"haspaid"_n>();
+  
+  
+  // This goes through all rolls that are already paid and waiting for the oracle callback
+  // If any of those rolls need the WAX that would be withdrawn to stay within the bankroll management, this withdrawal will fail
+  // This means that the PINK transfer will fail as well, so no funds would be lost
+  for (auto roll_itr = rolls_by_paid.find(1); roll_itr != rolls_by_paid.end(); roll_itr++) {
+    
+    asset total_bets_collected = asset(0, CORE_SYMBOL);  // = total_quantity_bet - (rake + fees)
+    
+    uint32_t max_range = roll_itr->max_result;
+    ChainedRange firstRange = ChainedRange(1, max_range, 0);
+    rollBets_t betsTable(_self, roll_itr->roll_id);
+    
+    for (auto bet_itr = betsTable.begin(); bet_itr != betsTable.end(); bet_itr++) {
+      double ev = (double)bet_itr->multiplier / 1000.0 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)max_range;
+      total_bets_collected.amount += (int64_t)((double)bet_itr->quantity.amount * (ev + 0.007));
+      
+      uint64_t payout = bet_itr->quantity.amount * bet_itr->multiplier / 1000;
+      firstRange.insertBet(bet_itr->lower_bound, bet_itr->upper_bound, payout);
+    }
+    
+    asset required_bankroll = getRequiredBankroll(firstRange, total_bets_collected.amount, max_range);
+    check(required_bankroll < stats.bankroll - wax_to_withdraw,
+    "Can't withdraw because there currently is an active roll that is too big to run without this amount. Try again a second from now.");
+  }
+  
+  
+  action(
+    permission_level{_self, "active"_n},
+    "pinknettoken"_n,
+    "retire"_n,
+    std::make_tuple(quantity, std::string("bankroll withdrawal token burn"))
+  ).send();
+  
+  transferFromBankroll(from, wax_to_withdraw, std::string("bankroll withdraw"));
+}
+
+
+
+
 /**
  * Private helper function to handle withdraws from the bankroll
  * @param recipient - The name of the account to receive the payment
@@ -404,7 +438,7 @@ void pinkbankroll::transferFromBankroll(name recipient, asset quantity, std::str
     permission_level{_self, "active"_n},
     _self,
     "logbrchange"_n,
-    std::make_tuple(-quantity, memo, stats.bankroll, stats.total_bankroll_weight)
+    std::make_tuple(-quantity, memo, stats.bankroll)
   ).send();
   
   action(
@@ -419,53 +453,53 @@ void pinkbankroll::transferFromBankroll(name recipient, asset quantity, std::str
 
 
 /**
- * Private function to handle deposits (as parsed from the receiveTransfer action)
+ * Private function to handle deposits (as parsed from the receivewaxtransfer action)
  * 
  * @param investor - The account name that sent the deposit
  * @param quantity - The amount of WAX to be invested
  * 
- * To keep track of which investor owns which percentage of the bankroll,
- * it would be possible to have a static total bankroll weight, and update every investors
- * individual weight every time a deposit/ withdrawal is made. This however is very inefficient.
- * Instead, the total bankroll weight is variable. This means that for every deposit/ withdrawal,
- * only the individual weight of one person as well as the total bankroll weight needs to be changed,
- * while the proportional bankroll weight of every investor changes correctly
+ * The bankroll ownership is handled by the PINK token in the pinknettoken contract
+ * If a user owns 10% of the supply of PINK tokens, that means that he is entitled to 10% of the bankroll
+ * When a new deposit is made, instead of inefficiently changing the balance of each token holder, new tokens are issued
  */
 void pinkbankroll::handleDeposit(name investor, asset quantity) {
   check(!isPaused(),
   "the contract is paused, only withdrawals and payouts are currently allowed");
   
   statsStruct stats = statsTable.get();
-    
-  uint64_t added_bankroll_weight;
+  
+  uint64_t added_pink_amount;
   if (stats.bankroll.amount == 0) {
-    added_bankroll_weight = quantity.amount;
+    added_pink_amount = quantity.amount / 1000; //WAX has 8 digits, PINK has 4 digits. Therefore deviding by 1000 means that the pink quantity will be 10x the wax quantity
   } else {
-    added_bankroll_weight = (uint64_t) ((double)quantity.amount / (double)stats.bankroll.amount * (double)stats.total_bankroll_weight);
+    added_pink_amount = (uint64_t) ((double)quantity.amount / (double)stats.bankroll.amount * (double)get_supply("pinknettoken"_n, PINK_SYMBOL.code()).amount);
   }
+  check(added_pink_amount > 0,
+  "The deposit is so small that it would equate to 0 PINK");
+  asset added_pink_quantity = asset(added_pink_amount, PINK_SYMBOL);
   
   stats.bankroll += quantity;
-  stats.total_bankroll_weight += added_bankroll_weight;
   statsTable.set(stats, _self);
   
+  action(
+    permission_level{_self, "active"_n},
+    "pinknettoken"_n,
+    "issue"_n,
+    std::make_tuple(_self, added_pink_quantity, std::string("token issue for deposit"))
+  ).send();
   
-  auto investor_itr = investorsTable.find(investor.value);
-  if (investor_itr != investorsTable.end()) {
-    investorsTable.modify(investor_itr, _self, [&](auto& i) {
-      i.bankroll_weight += added_bankroll_weight;
-    });
-  } else {
-    investorsTable.emplace(_self, [&](auto& i){
-      i.investor = investor;
-      i.bankroll_weight = added_bankroll_weight;
-    });
-  }
+  action(
+    permission_level{_self, "active"_n},
+    "pinknettoken"_n,
+    "transfer"_n,
+    std::make_tuple(_self, investor, added_pink_quantity, std::string("token issue for deposit"))
+  ).send();
   
   action(
     permission_level{_self, "active"_n},
     _self,
     "logbrchange"_n,
-    std::make_tuple(quantity, std::string("bankroll deposit"), stats.bankroll, stats.total_bankroll_weight)
+    std::make_tuple(quantity, std::string("bankroll deposit"), stats.bankroll)
   ).send();
 }
 
@@ -473,7 +507,7 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
 
 
 /**
- * Private function to handle starting a roll (as parsed from the receiveTransfer action)
+ * Private function to handle starting a roll (as parsed from the receivewaxtransfer action)
  * Note: This has a worst case runtime of O(bets^2) and could theoretically take more than 30ms if the roll has a lot of different bets
  *       If this happens, the transaction will fail. This means that the WAX transfer will also fail, so no funds will be lost
  * 
@@ -507,7 +541,7 @@ void pinkbankroll::handleStartRoll(name creator, uint64_t creator_id, asset quan
   
   for (auto it = betsTable.begin(); it != betsTable.end(); it++) {
     total_quantity_bet += it->quantity;
-    double ev = (double)it->multiplier / 1000.0 * (double)(it->upper_bound - it->lower_bound + 1) / (double)itr_creator_and_id->max_result;
+    double ev = (double)it->multiplier / 1000.0 * (double)(it->upper_bound - it->lower_bound + 1) / (double)max_range;
     total_bets_collected.amount += (int64_t)((double)it->quantity.amount * (ev + 0.007));
     
     uint64_t payout = it->quantity.amount * it->multiplier / 1000;
@@ -600,10 +634,10 @@ ACTION pinkbankroll::logstartroll(uint64_t roll_id, name creator, uint64_t creat
   require_auth(_self);
 }
 
-ACTION pinkbankroll::loggetrand(uint64_t roll_id, uint32_t result, asset bankroll_change, checksum256 random_value) {
+ACTION pinkbankroll::loggetrand(uint64_t roll_id, uint32_t result, asset bankroll_change, asset new_bankroll, checksum256 random_value) {
   require_auth(_self);
 }
 
-ACTION pinkbankroll::logbrchange(asset change, std::string message, asset new_bankroll, uint64_t total_bankroll_weight) {
+ACTION pinkbankroll::logbrchange(asset change, std::string message, asset new_bankroll) {
   require_auth(_self);
 }
