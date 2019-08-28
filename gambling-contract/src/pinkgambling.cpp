@@ -77,6 +77,13 @@ ACTION pinkgambling::startroll(uint64_t roll_id) {
           std::make_tuple(_self, bet_itr->bettor, refund_quantity, std::string("The bets in the cycle were to high for the bankroll. Therefore ") + refund_factor_string + std::string(" of your bet were refunded. The rest will be bet normally. Note that this is done before the result gets computed."))
         ).send();
       }
+      
+      action(
+        permission_level{_self, "active"_n},
+        _self,
+        "logreduction"_n,
+        std::make_tuple(roll_id, roll_itr->cycle_number, refund_factor)
+      ).send();
     }
     
     sendRoll(roll_id);
@@ -479,5 +486,9 @@ ACTION pinkgambling::logbet(uint64_t roll_id, uint64_t cycle_number, uint64_t be
 }
 
 ACTION pinkgambling::logresult(uint64_t roll_id, uint64_t cycle_number, uint32_t max_result, name rake_recipient, uint32_t roll_result, uint64_t identifier, uint32_t cycle_time) {
+  require_auth(_self);
+}
+
+ACTION pinkgambling::logreduction(uint64_t roll_id, uint64_t cycle_number, double reduction) {
   require_auth(_self);
 }
