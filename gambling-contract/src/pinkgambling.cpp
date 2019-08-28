@@ -60,7 +60,7 @@ ACTION pinkgambling::startroll(uint64_t roll_id) {
     bankrollStatsStruct bankroll_stats = bankrollStatsTable.get();
     
     if (bankroll_stats.bankroll < required_bankroll) {
-      double refund_factor = 1.01 - ((double)bankroll_stats.bankroll.amount / (double)required_bankroll.amount);
+      double refund_factor = 1.01 - ((double)bankroll_stats.bankroll.amount / (double)required_bankroll.amount);  // 1.01 instead of 1.00 because of possible rounding errors
       std::string refund_factor_string = std::to_string(refund_factor * 100) + std::string("%");
       
       for (auto bet_itr = betsTable.begin(); bet_itr != betsTable.end(); bet_itr++) {
