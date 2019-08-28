@@ -51,6 +51,41 @@ ACTION pinkgambling::startroll(uint64_t roll_id) {
     
   } else {
     //At least one bet has been placed. Calling bankroll contract
+    
+    // Checks if the roll is within the bankroll contract's bankroll management
+    // If not, all bets get reduced by the same factor so that the whole roll will be acceptable again
+    // All bettors will immediately get the WAX that won't be bet sent back to them
+    asset required_bankroll = calculateRollRequiredBankroll(roll_id);
+    bankroll_stats_t bankrollStatsTable("pinkbankroll"_n, "pinkbankroll"_n.value);
+    bankrollStatsStruct bankroll_stats = bankrollStatsTable.get();
+    
+    if (bankroll_stats.bankroll < required_bankroll) {
+      double refund_factor = 1.01 - ((double)bankroll_stats.bankroll.amount / (double)required_bankroll.amount);  // 1.01 instead of 1.00 because of possible rounding errors
+      std::string refund_factor_string = std::to_string(refund_factor * 100) + std::string("%");
+      
+      for (auto bet_itr = betsTable.begin(); bet_itr != betsTable.end(); bet_itr++) {
+        uint64_t refund_amount = (uint64_t)((double)bet_itr->quantity.amount * refund_factor);
+        asset refund_quantity = asset(refund_amount, CORE_SYMBOL);
+        betsTable.modify(bet_itr, _self, [&](auto& b) {
+          b.quantity -= refund_quantity;
+        });
+        
+        action(
+          permission_level{_self, "active"_n},
+          "eosio.token"_n,
+          "transfer"_n,
+          std::make_tuple(_self, bet_itr->bettor, refund_quantity, std::string("The bets in the cycle were to high for the bankroll. Therefore ") + refund_factor_string + std::string(" of your bet were refunded. The rest will be bet normally. Note that this is done before the result gets computed."))
+        ).send();
+      }
+      
+      action(
+        permission_level{_self, "active"_n},
+        _self,
+        "logreduction"_n,
+        std::make_tuple(roll_id, roll_itr->cycle_number, refund_factor)
+      ).send();
+    }
+    
     sendRoll(roll_id);
   }
 }
@@ -300,23 +335,15 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
     b.random_seed = random_seed;
   });
   
-  ChainedRange firstRange = ChainedRange(1, roll_itr->max_result, 0);
-  asset total_bets_collected = asset(0, CORE_SYMBOL);  // = total_quantity_bet - (rake + fees)
-  
-  for (auto bet_itr = betsTable.begin(); bet_itr != betsTable.end(); bet_itr++) {
-    double ev = (double)bet_itr->multiplier / 1000.0 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)roll_itr->max_result;
-    total_bets_collected.amount += (int64_t)((double)bet_itr->quantity.amount * (ev + 0.007));
-    
-    uint64_t payout = bet_itr->quantity.amount * bet_itr->multiplier / 1000;
-    firstRange.insertBet(bet_itr->lower_bound, bet_itr->upper_bound, payout);
-  }
-  
+  asset required_bankroll = calculateRollRequiredBankroll(roll_id);
   bankroll_stats_t bankrollStatsTable("pinkbankroll"_n, "pinkbankroll"_n.value);
-  asset required_bankroll = getRequiredBankroll(firstRange, total_bets_collected.amount, roll_itr->max_result);
-  print("required bankroll: ", required_bankroll);
   bankrollStatsStruct bankroll_stats = bankrollStatsTable.get();
-  check(bankroll_stats.bankroll >= required_bankroll,
-  "the current bankroll is too small to accept this roll");
+  
+  // The maxbet for the gambling contract is 95% of the maxbet of the bankroll contract
+  // This is to make a sitation in which the bankroll would shrink so low that the original bet wouldn't be accepted anymore
+  // less likely and harder to provoke
+  check(bankroll_stats.bankroll.amount * 0.95 >= required_bankroll.amount,
+  "the current bankroll is too small to accept this bet");
   
   action(
     permission_level{_self, "active"_n},
@@ -424,6 +451,34 @@ void pinkgambling::handleResult(uint64_t roll_id, uint32_t result) {
 }
 
 
+/**
+ * Calculates the required bankroll of a roll dependant on the current bets of this roll
+ * 
+ * @param roll_id - The id of the roll to calculate the required bankroll for
+ */
+asset pinkgambling::calculateRollRequiredBankroll(uint64_t roll_id) {
+  auto roll_itr = rollsTable.find(roll_id);
+  check(roll_itr != rollsTable.end(),
+  "no roll with this id exist");
+  rollBets_t betsTable(_self, roll_id);
+  
+  ChainedRange firstRange = ChainedRange(1, roll_itr->max_result, 0);
+  asset total_bets_collected = asset(0, CORE_SYMBOL);  // = total_quantity_bet - (rake + fees)
+  
+  for (auto bet_itr = betsTable.begin(); bet_itr != betsTable.end(); bet_itr++) {
+    double ev = (double)bet_itr->multiplier / 1000.0 * (double)(bet_itr->upper_bound - bet_itr->lower_bound + 1) / (double)roll_itr->max_result;
+    total_bets_collected.amount += (int64_t)((double)bet_itr->quantity.amount * (ev + 0.007));
+    
+    uint64_t payout = bet_itr->quantity.amount * bet_itr->multiplier / 1000;
+    firstRange.insertBet(bet_itr->lower_bound, bet_itr->upper_bound, payout);
+  }
+  
+  bankroll_stats_t bankrollStatsTable("pinkbankroll"_n, "pinkbankroll"_n.value);
+  asset required_bankroll = getRequiredBankroll(firstRange, total_bets_collected.amount, roll_itr->max_result);
+  return required_bankroll;
+}
+
+
 //Only for external logging
 
 ACTION pinkgambling::logbet(uint64_t roll_id, uint64_t cycle_number, uint64_t bet_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t multiplier, uint64_t client_seed) {
@@ -431,5 +486,9 @@ ACTION pinkgambling::logbet(uint64_t roll_id, uint64_t cycle_number, uint64_t be
 }
 
 ACTION pinkgambling::logresult(uint64_t roll_id, uint64_t cycle_number, uint32_t max_result, name rake_recipient, uint32_t roll_result, uint64_t identifier, uint32_t cycle_time) {
+  require_auth(_self);
+}
+
+ACTION pinkgambling::logreduction(uint64_t roll_id, uint64_t cycle_number, double reduction) {
   require_auth(_self);
 }
