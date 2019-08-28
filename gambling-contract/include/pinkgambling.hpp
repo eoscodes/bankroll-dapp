@@ -67,7 +67,6 @@ CONTRACT pinkgambling : public contract {
     //This is needed to get the current bankroll of the bankroll contract
     struct bankrollStatsStruct {
       asset bankroll = asset(0, symbol("WAX", 8));
-      uint64_t total_bankroll_weight = 0;
       uint64_t current_roll_id = 0;
     };
     typedef singleton<"stats"_n, bankrollStatsStruct> bankroll_stats_t;
@@ -81,4 +80,6 @@ CONTRACT pinkgambling : public contract {
     void addBet(asset quantity, uint64_t roll_id, name bettor, uint32_t multiplier, uint32_t lower_bound, uint32_t upper_bound, uint64_t random_seed);
     void sendRoll(uint64_t roll_id);
     void handleResult(uint64_t roll_id, uint32_t result);
+    
+    asset calculateRollRequiredBankroll(uint64_t roll_id);
 };
