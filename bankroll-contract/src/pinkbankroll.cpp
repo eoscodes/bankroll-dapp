@@ -442,11 +442,11 @@ void pinkbankroll::transferFromBankroll(name recipient, asset quantity, std::str
   ).send();
   
   action(
-      permission_level{_self, "active"_n},
-      "eosio.token"_n,
-      "transfer"_n,
-      std::make_tuple(_self, recipient, quantity, memo)
-    ).send();
+    permission_level{_self, "active"_n},
+    "eosio.token"_n,
+    "transfer"_n,
+    std::make_tuple(_self, recipient, quantity, memo)
+  ).send();
 }
 
 
