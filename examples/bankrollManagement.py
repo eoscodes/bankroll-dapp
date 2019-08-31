@@ -81,7 +81,7 @@ def calculateMinBankroll(chainedRangeStart, amountCollected, maxResult):
             variance += ((effectivePayout * odds) / maxBetFactor) ** 3
         currentRange = currentRange.next
     # To make the previously cubed values proportional to the bankroll that allows them, the cube root is needed
-    return variance ** (1/3) * 100
+    return variance ** (1/3) * 125
 
 
 # Simulates a specified amount of rolls and returns the bankroll after these rolls
