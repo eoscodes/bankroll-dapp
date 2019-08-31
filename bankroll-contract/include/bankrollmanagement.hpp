@@ -92,6 +92,6 @@ asset getRequiredBankroll(ChainedRange firstRange, uint64_t totalBetAmount, uint
   }
   variance = cbrt(variance);
   
-  uint64_t requiredBankrollAmount = (uint64_t)(variance * 100.0);
+  uint64_t requiredBankrollAmount = (uint64_t)(variance * 125.0);
   return asset(requiredBankrollAmount, symbol("WAX", 8));
 }
