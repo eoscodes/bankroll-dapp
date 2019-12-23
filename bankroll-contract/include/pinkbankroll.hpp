@@ -24,7 +24,7 @@ CONTRACT pinkbankroll : public contract {
     
     ACTION receiverand(uint64_t assoc_id, checksum256 random_value);
     [[eosio::on_notify("eosio.token::transfer")]] void receivewaxtransfer(name from, name to, asset quantity, std::string memo);
-    [[eosio::on_notify("pinknettoken::transfer")]] void receivepinktransfer(name from, name to, asset quantity, std::string memo);
+    [[eosio::on_notify("token.pink::transfer")]] void receivepinktransfer(name from, name to, asset quantity, std::string memo);
     
     ACTION notifyresult(name creator, uint64_t creator_id, uint32_t result);
   
@@ -112,7 +112,7 @@ CONTRACT pinkbankroll : public contract {
     /**
      * The following code is taken from the eosio.token contract
      * https://github.com/EOSIO/eosio.contracts/blob/master/contracts/eosio.token
-     * It is needed to get the supply from the pinknettoken contract
+     * It is needed to get the supply from the token.pink contract
      * /
     
     
