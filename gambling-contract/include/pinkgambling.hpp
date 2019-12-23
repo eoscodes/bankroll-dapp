@@ -19,7 +19,7 @@ CONTRACT pinkgambling : public contract {
     ACTION startroll(uint64_t roll_id);
     
     [[eosio::on_notify("eosio.token::transfer")]] void receivetransfer(name from, name to, asset quantity, std::string memo);
-    [[eosio::on_notify("pinkbankroll::notifyresult")]] void receivenotifyresult(name creator, uint64_t creator_id, uint32_t result);
+    [[eosio::on_notify("roll.pink::notifyresult")]] void receivenotifyresult(name creator, uint64_t creator_id, uint32_t result);
   
     ACTION logbet(uint64_t roll_id, uint64_t cycle_number, uint64_t bet_id, name bettor, asset quantity, uint32_t lower_bound, uint32_t upper_bound, uint32_t multiplier, uint64_t client_seed);
     ACTION logresult(uint64_t roll_id, uint64_t cycle_number, uint32_t max_result, name rake_recipient, uint32_t roll_result, uint64_t identifier, uint32_t cycle_time);

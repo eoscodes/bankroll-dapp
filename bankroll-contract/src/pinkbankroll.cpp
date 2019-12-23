@@ -87,6 +87,9 @@ ACTION pinkbankroll::announcebet(name creator, uint64_t creator_id, name bettor,
   check(itr_creator_and_id != rolls_by_creator_and_id.end(),
   "No bet with the specified creator_id has been announced");
   
+  check(!itr_creator_and_id->paid,
+  "the roll has already been paid for");
+  
   check(quantity.is_valid(),
   "quantity is invalid");
   check(quantity.symbol == CORE_SYMBOL,
@@ -352,7 +355,7 @@ void pinkbankroll::receivewaxtransfer(name from, name to, asset quantity, std::s
 
 
 /**
- * This is called whenever there is a pinknettoken transfer involving pinkbankroll as either sender or recipient
+ * This is called whenever there is a token.pink transfer involving pinkbankroll as either sender or recipient
  * When PINK is sent to the pinkbankroll account, this is interpreted as a withdrawal
  * The PINK tokens get burned and the sender will get the corresponding part of the current bankroll in WAX
  * 
@@ -375,7 +378,7 @@ void pinkbankroll::receivepinktransfer(name from, name to, asset quantity, std::
   "quantity must be in PINK");
   
   statsStruct stats = statsTable.get();
-  uint64_t amount_to_withdraw = (uint64_t)((double)stats.bankroll.amount * (double)quantity.amount / (double)get_supply("pinknettoken"_n, PINK_SYMBOL.code()).amount);
+  uint64_t amount_to_withdraw = (uint64_t)((double)stats.bankroll.amount * (double)quantity.amount / (double)get_supply("token.pink"_n, PINK_SYMBOL.code()).amount);
   asset wax_to_withdraw = asset(amount_to_withdraw, CORE_SYMBOL);
   
   auto rolls_by_paid = rollsTable.get_index<"haspaid"_n>();
@@ -408,7 +411,7 @@ void pinkbankroll::receivepinktransfer(name from, name to, asset quantity, std::
   
   action(
     permission_level{_self, "active"_n},
-    "pinknettoken"_n,
+    "token.pink"_n,
     "retire"_n,
     std::make_tuple(quantity, std::string("bankroll withdrawal token burn"))
   ).send();
@@ -458,7 +461,7 @@ void pinkbankroll::transferFromBankroll(name recipient, asset quantity, std::str
  * @param investor - The account name that sent the deposit
  * @param quantity - The amount of WAX to be invested
  * 
- * The bankroll ownership is handled by the PINK token in the pinknettoken contract
+ * The bankroll ownership is handled by the PINK token in the token.pink contract
  * If a user owns 10% of the supply of PINK tokens, that means that he is entitled to 10% of the bankroll
  * When a new deposit is made, instead of inefficiently changing the balance of each token holder, new tokens are issued
  */
@@ -472,7 +475,7 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
   if (stats.bankroll.amount == 0) {
     added_pink_amount = quantity.amount / 1000; //WAX has 8 digits, PINK has 4 digits. Therefore deviding by 1000 means that the pink quantity will be 10x the wax quantity
   } else {
-    added_pink_amount = (uint64_t) ((double)quantity.amount / (double)stats.bankroll.amount * (double)get_supply("pinknettoken"_n, PINK_SYMBOL.code()).amount);
+    added_pink_amount = (uint64_t) ((double)quantity.amount / (double)stats.bankroll.amount * (double)get_supply("token.pink"_n, PINK_SYMBOL.code()).amount);
   }
   check(added_pink_amount > 0,
   "The deposit is so small that it would equate to 0 PINK");
@@ -483,14 +486,14 @@ void pinkbankroll::handleDeposit(name investor, asset quantity) {
   
   action(
     permission_level{_self, "active"_n},
-    "pinknettoken"_n,
+    "token.pink"_n,
     "issue"_n,
     std::make_tuple(_self, added_pink_quantity, std::string("token issue for deposit"))
   ).send();
   
   action(
     permission_level{_self, "active"_n},
-    "pinknettoken"_n,
+    "token.pink"_n,
     "transfer"_n,
     std::make_tuple(_self, investor, added_pink_quantity, std::string("token issue for deposit"))
   ).send();

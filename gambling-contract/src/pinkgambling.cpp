@@ -56,7 +56,7 @@ ACTION pinkgambling::startroll(uint64_t roll_id) {
     // If not, all bets get reduced by the same factor so that the whole roll will be acceptable again
     // All bettors will immediately get the WAX that won't be bet sent back to them
     asset required_bankroll = calculateRollRequiredBankroll(roll_id);
-    bankroll_stats_t bankrollStatsTable("pinkbankroll"_n, "pinkbankroll"_n.value);
+    bankroll_stats_t bankrollStatsTable("roll.pink"_n, "roll.pink"_n.value);
     bankrollStatsStruct bankroll_stats = bankrollStatsTable.get();
     
     if (bankroll_stats.bankroll < required_bankroll) {
@@ -94,7 +94,7 @@ ACTION pinkgambling::startroll(uint64_t roll_id) {
 
 
 /**
- * This is called whenever there is a eosio.token transfer involving pinkbankroll as either sender or recipient
+ * This is called whenever there is a eosio.token transfer involving roll.pink as either sender or recipient
  * The memo is parsed and private functions are then called with the parsed input
  * 
  * @param from - The account name that sent the transfer
@@ -336,7 +336,7 @@ void pinkgambling::addBet(asset quantity, uint64_t roll_id, name bettor, uint32_
   });
   
   asset required_bankroll = calculateRollRequiredBankroll(roll_id);
-  bankroll_stats_t bankrollStatsTable("pinkbankroll"_n, "pinkbankroll"_n.value);
+  bankroll_stats_t bankrollStatsTable("roll.pink"_n, "roll.pink"_n.value);
   bankrollStatsStruct bankroll_stats = bankrollStatsTable.get();
   
   // The maxbet for the gambling contract is 95% of the maxbet of the bankroll contract
@@ -377,7 +377,7 @@ void pinkgambling::sendRoll(uint64_t roll_id) {
   
   action(
     permission_level{_self, "active"_n},
-    "pinkbankroll"_n,
+    "roll.pink"_n,
     "announceroll"_n,
     std::make_tuple(_self, roll_id, roll_itr->max_result, roll_itr->rake_recipient)
   ).send();
@@ -388,7 +388,7 @@ void pinkgambling::sendRoll(uint64_t roll_id) {
     total_bet += bet_itr->quantity;
     action(
     permission_level{_self, "active"_n},
-      "pinkbankroll"_n,
+      "roll.pink"_n,
       "announcebet"_n,
       std::make_tuple(_self, roll_id, bet_itr->bettor, bet_itr->quantity, bet_itr->lower_bound, bet_itr->upper_bound, bet_itr->multiplier, bet_itr->random_seed)
     ).send();
@@ -398,7 +398,7 @@ void pinkgambling::sendRoll(uint64_t roll_id) {
     permission_level{_self, "active"_n},
     "eosio.token"_n,
     "transfer"_n,
-    std::make_tuple(_self, "pinkbankroll"_n, total_bet, std::string("startroll ") + std::to_string(roll_id))
+    std::make_tuple(_self, "roll.pink"_n, total_bet, std::string("startroll ") + std::to_string(roll_id))
   ).send();
   
 }
@@ -473,7 +473,7 @@ asset pinkgambling::calculateRollRequiredBankroll(uint64_t roll_id) {
     firstRange.insertBet(bet_itr->lower_bound, bet_itr->upper_bound, payout);
   }
   
-  bankroll_stats_t bankrollStatsTable("pinkbankroll"_n, "pinkbankroll"_n.value);
+  bankroll_stats_t bankrollStatsTable("roll.pink"_n, "roll.pink"_n.value);
   asset required_bankroll = getRequiredBankroll(firstRange, total_bets_collected.amount, roll_itr->max_result);
   return required_bankroll;
 }
